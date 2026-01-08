@@ -1,84 +1,48 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useUserStore, type User } from "@/stores/useUserStore";
 
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-  avatar_url?: string;
-  email_verified?: boolean;
-  role: "employer" | "employee" | "both";
-  plan: "standard" | "premium"
-}
+// Re-export User type for backward compatibility
+export type { User };
 
-interface AuthContextType {
+interface UseAuthReturn {
   user: User | null;
   setUser: (user: User | null) => void;
   initialized: boolean;
+  fetchUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [initialized, setInitialized] = useState(false);
-
-  // ---------------------------------------------
-  // Bootstrap auth state (runs ONCE)
-  // ---------------------------------------------
-  useEffect(() => {
-    const bootstrapAuth = async () => {
-      try {
-        const raw = localStorage.getItem("user");
-
-        if (raw) {
-          setUser(JSON.parse(raw));
-          return;
-        }
-
-        // No local user → ask backend
-        const res = await fetch("http://localhost:8000/api/auth/me", {
-          credentials: "include", // IMPORTANT if using cookies
-        });
-
-        if (!res.ok) {
-          return;
-        }
-
-        const data: User = await res.json();
-        setUser(data);
-        localStorage.setItem("user", JSON.stringify(data));
-      } catch (err) {
-        console.error("Auth bootstrap failed", err);
-      } finally {
-        setInitialized(true);
-      }
-    };
-
-    bootstrapAuth();
-  }, []);
+/**
+ * Custom hook for authentication using Zustand store
+ * 
+ * This hook:
+ * - Initializes user state from localStorage or backend on mount
+ * - Provides user state and setter function
+ * - Automatically stores user info to Zustand store after login
+ */
+export const useAuth = (): UseAuthReturn => {
+  const { user, setUser, initialized, initialize, fetchUser } = useUserStore();
 
   // ---------------------------------------------
-  // Keep localStorage in sync
+  // Bootstrap auth state (runs ONCE on mount)
   // ---------------------------------------------
   useEffect(() => {
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("user");
+    if (!initialized) {
+      initialize();
     }
-  }, [user]);
+  }, [initialized, initialize]);
 
-  return (
-    <AuthContext.Provider value={{ user, setUser, initialized }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+  // ---------------------------------------------
+  // Wrapper for setUser that ensures store is updated
+  // ---------------------------------------------
+  const handleSetUser = (newUser: User | null) => {
+    setUser(newUser);
+    // Store is automatically persisted via Zustand persist middleware
+  };
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return ctx;
+  return {
+    user,
+    setUser: handleSetUser,
+    initialized,
+    fetchUser, // Expose fetchUser to fetch user after login
+  };
 };

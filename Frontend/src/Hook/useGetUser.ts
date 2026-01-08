@@ -1,49 +1,65 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useUserStore } from "@/stores/useUserStore";
+
+const API_BASE_URL = "http://localhost:8000";
 
 /**
  * useVerifySession Hook
  *
- * Logic:
- * 1. On mount, verifies the current session via backend API.
- * 2. Uses cookie-based authentication (withCredentials).
- * 3. If API returns 200 → user is logged in.
- * 4. On failure (401 / 403 / 500):
- *    - Mark user as logged out
- *    - Redirect to landing/login page
+ * Optimized version that:
+ * 1. Integrates with Zustand store for user state
+ * 2. Verifies session via backend API on mount
+ * 3. Uses cookie-based authentication (withCredentials)
+ * 4. Updates store with user data on successful verification
+ * 5. Redirects to home on failure
  */
 export const useVerifySession = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const { user, fetchUser, initialized } = useUserStore();
   const navigate = useNavigate();
 
   useEffect(() => {
+    let isMounted = true;
+
     const verifySession = async () => {
       try {
-        const response = await axios.get(
-          "http://localhost:8000/api/auth/get-current-user",
+        // Verify session and fetch user data
+        const response = await fetch(
+          `${API_BASE_URL}/api/auth/get-current-user`,
           {
-            withCredentials: true,
+            credentials: "include",
+            method: "GET",
           }
         );
 
-        if (response.status === 200) {
-          setIsLoggedIn(true);
+        if (!isMounted) return;
+
+        if (response.ok) {
+          // Session is valid, fetch full user data
+          await fetchUser();
         } else {
-          throw new Error("Session invalid");
+          // Session invalid - clear user and redirect
+          useUserStore.getState().clearUser();
+          navigate("/");
         }
       } catch (error) {
+        if (!isMounted) return;
         console.error("Session verification failed:", error);
-        setIsLoggedIn(false);
+        useUserStore.getState().clearUser();
         navigate("/");
-      } finally {
-        setIsLoading(false);
       }
     };
 
     verifySession();
-  }, [navigate]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate, fetchUser]);
+
+  // Memoize computed values
+  const isLoggedIn = useMemo(() => !!user, [user]);
+  const isLoading = useMemo(() => !initialized, [initialized]);
 
   return { isLoggedIn, isLoading };
 };

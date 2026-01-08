@@ -9,3 +9,5 @@ asyncpg
 python-multipart
 sqlmodel
 itsdangerous
+requests
+xmltodict

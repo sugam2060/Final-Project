@@ -3,13 +3,12 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from authlib.integrations.starlette_client import OAuth
-from jose import jwt
-from datetime import datetime, timedelta
 import uuid
 
 from config import settings
 from database.db import get_session
 from database.schema import User, OAuthIdentity
+from utils.jwt_utils import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -25,26 +24,6 @@ oauth.register(
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
-
-# -----------------------------
-# JWT Helper
-# -----------------------------
-def create_access_token(user_id: uuid.UUID) -> str:
-    expire = datetime.utcnow() + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-
-    payload = {
-        "sub": str(user_id),
-        "exp": expire,
-        "iat": datetime.utcnow(),
-    }
-
-    return jwt.encode(
-        payload,
-        str(settings.JWT_SECRET_KEY),
-        algorithm=settings.JWT_ALGORITHM,
-    )
 
 
 # -----------------------------

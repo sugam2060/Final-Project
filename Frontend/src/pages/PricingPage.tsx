@@ -1,8 +1,20 @@
 import { PricingCardStandard } from "@/components/pricing/StandardPricing";
 import { PricingCardPremium } from "@/components/pricing/PremiumPricing";
 import { FAQItem } from "@/components/pricing/PricingFAQ";
+import { useQuery } from "@tanstack/react-query";
+import { fetchPlans, type PlansListResponse } from "@/api/plan";
+import { toast } from "sonner";
 
 export default function PricingPage() {
+  const { data, isError, error } = useQuery<PlansListResponse>({
+    queryKey: ["plans"],
+    queryFn: fetchPlans,
+  });
+
+  if (isError) {
+    toast.error((error as Error).message || "Failed to load plans");
+  }
+
   return (
     <main className="min-h-screen bg-background-light text-slate-900 font-display py-12">
       <section className="max-w-7xl mx-auto px-4 md:px-10">
@@ -24,8 +36,12 @@ export default function PricingPage() {
 
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          <PricingCardStandard />
-          <PricingCardPremium />
+          <PricingCardStandard
+            plan={data?.plans.find((p) => p.plan_name === "standard")}
+          />
+          <PricingCardPremium
+            plan={data?.plans.find((p) => p.plan_name === "premium")}
+          />
         </div>
 
         {/* FAQ */}

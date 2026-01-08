@@ -1,4 +1,5 @@
-import { Routes, Route, Outlet } from "react-router-dom";
+import { Routes, Route, Outlet, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import Layout from "@/components/layout/Layout";
 import MainPage from "@/pages/MainPage";
 import SocialLoginPage from "@/pages/LoginPage";
@@ -22,7 +23,21 @@ function PostRoute() {
 /* ------------------------------------------------------------------ */
 
 function App() {
-  const { initialized } = useAuth();
+  const { initialized, fetchUser } = useAuth();
+  const location = useLocation();
+
+  // When redirected back from eSewa with payment success, refresh user info
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const paymentStatus = params.get("payment");
+
+    if (paymentStatus === "success") {
+      // Fetch latest user data (updated plan/role) into Zustand store
+      fetchUser().catch((err) => {
+        console.error("Failed to refresh user after payment:", err);
+      });
+    }
+  }, [location.search, fetchUser]);
 
   if (!initialized) {
     return null;

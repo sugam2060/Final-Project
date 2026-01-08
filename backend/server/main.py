@@ -6,6 +6,9 @@ from sqlmodel import SQLModel
 from starlette.middleware.sessions import SessionMiddleware
 from routes.auth.verify_user import router as verify_user_router
 from routes.auth.logout import router as logout_router
+from routes.payment.payment import router as payment_router
+from routes.payment.payment_callback import router as payment_callback_router
+from routes.plan.plan import router as plan_router
 
 
 from config import settings
@@ -64,6 +67,9 @@ app.add_middleware(
 app.include_router(google_auth_router)
 app.include_router(verify_user_router)
 app.include_router(logout_router)
+app.include_router(payment_router)
+app.include_router(payment_callback_router)
+app.include_router(plan_router)
 
 
 # -----------------------------

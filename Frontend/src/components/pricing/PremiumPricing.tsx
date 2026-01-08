@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 import {
@@ -7,8 +8,56 @@ import {
   FiClock,
   FiFilter,
 } from "react-icons/fi";
+import { toast } from "sonner";
+import { useAuth } from "@/Hook/AuthContext";
+import { initiatePayment, submitEsewaPayment } from "@/api/payment";
+import type { Plan } from "@/api/plan";
 
-export function PricingCardPremium() {
+interface PricingCardPremiumProps {
+  plan?: Plan;
+}
+
+export function PricingCardPremium({ plan }: PricingCardPremiumProps) {
+  const { user } = useAuth();
+
+  const paymentMutation = useMutation({
+    mutationFn: initiatePayment,
+    onSuccess: (data) => {
+      console.log("Payment initiation successful:", data);
+      if (data.payment_url && data.form_data) {
+        try {
+          // Submit form to eSewa
+          submitEsewaPayment(data);
+          toast.info("Redirecting to payment gateway...");
+        } catch (error) {
+          console.error("Error submitting payment form:", error);
+          toast.error("Failed to redirect to payment gateway. Please try again.");
+        }
+      } else {
+        console.error("Invalid payment data:", data);
+        toast.error("Payment data not received");
+      }
+    },
+    onError: (error: Error) => {
+      console.error("Payment initiation error:", error);
+      toast.error(error.message || "Failed to initiate payment");
+    },
+  });
+
+  const handlePayment = () => {
+    if (!user) {
+      toast.error("Please login to continue");
+      return;
+    }
+
+    paymentMutation.mutate({
+      plan: plan?.plan_name ?? "premium",
+      amount: plan?.price ?? 1000.0,
+      product_name:
+        plan?.description ?? "Premium Plan - Monthly Subscription with AI",
+    });
+  };
+
   return (
     <div className="relative bg-slate-900 rounded-3xl p-8 border-2 border-primary shadow-2xl text-white flex flex-col">
       {/* Ribbon */}
@@ -32,16 +81,24 @@ export function PricingCardPremium() {
 
       <div className="mb-8">
         <div className="flex items-baseline gap-1">
-          <span className="text-5xl font-black">₹1000</span>
-          <span className="text-slate-400">/ month</span>
+          <span className="text-5xl font-black">
+            ₹{plan?.price ?? 1000}
+          </span>
+          <span className="text-slate-400">
+            {plan ? `/ ${plan.valid_for} days` : "/ month"}
+          </span>
         </div>
         <p className="text-xs text-slate-400 mt-2">
           Up to 5 automated postings included
         </p>
       </div>
 
-      <Button className="mb-10 py-6 text-base shadow-lg shadow-primary/30">
-        Select Premium
+      <Button 
+        className="mb-10 py-6 text-base shadow-lg shadow-primary/30"
+        onClick={handlePayment}
+        disabled={paymentMutation.isPending}
+      >
+        {paymentMutation.isPending ? "Processing..." : "Select Premium"}
       </Button>
 
       <div className="space-y-4">
