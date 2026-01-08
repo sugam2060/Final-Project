@@ -79,41 +79,32 @@ class Settings:
     # -----------------------------
     # eSewa Payment Integration
     # -----------------------------
-    ESEWA_MERCHANT_CODE: str = config(
-        "ESEWA_MERCHANT_CODE",
-        cast=str,
-        default="EPAYTEST",  # Test merchant code
-    )
-    
     ESEWA_SECRET_KEY: Secret = config(
         "ESEWA_SECRET_KEY",
         cast=Secret,
-        default="8gBm/:&EnhH.1/q",  # Test secret key
+        default="8gBm/:&EnhH.1/q",  # Default UAT key
     )
     
-    ESEWA_PAYMENT_URL: str = config(
-        "ESEWA_PAYMENT_URL",
+    ESEWA_PRODUCT_CODE: str = config(
+        "ESEWA_PRODUCT_CODE",
         cast=str,
-        default="https://rc-epay.esewa.com.np/api/epay/main/v2/form",  # Test URL (v2 form)
-        # Alternative test URLs if above doesn't work:
-        # "https://uat.esewa.com.np/epay/main" (older version)
-        # "https://dev.esewa.com.np/epay/main" (development)
+        default="EPAYTEST",  # Test product code
+    )
+    
+    ESEWA_INITIATE_URL: str = config(
+        "ESEWA_INITIATE_URL",
+        cast=str,
+        default="https://rc-epay.esewa.com.np/api/epay/main/v2/form",  # Test URL
         # Production: "https://epay.esewa.com.np/api/epay/main/v2/form"
     )
     
-    ESEWA_VERIFY_URL: str = config(
-        "ESEWA_VERIFY_URL",
-        cast=str,
-        default="https://rc-epay.esewa.com.np/epay/transrec",  # Test URL
-        # Production: "https://esewa.com.np/epay/transrec"
-    )
-    
-    ESEWA_STATUS_URL: str = config(
-        "ESEWA_STATUS_URL",
+    ESEWA_STATUS_CHECK_URL: str = config(
+        "ESEWA_STATUS_CHECK_URL",
         cast=str,
         default="https://rc.esewa.com.np/api/epay/transaction/status/",  # Test URL
         # Production: "https://esewa.com.np/api/epay/transaction/status/"
     )
+
 
 
 # Singleton-style access

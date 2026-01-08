@@ -1,11 +1,5 @@
 from .user_schema import User, UserRole, OAuthIdentity
-from .payment_schema import (
-    Plan, 
-    UserPlan, 
-    PaymentTransaction, 
-    TransactionStatus,
-    UserSubscription
-)
+from .plan_schema import Plan, UserPlan, UserSubscription
 
 __all__ = [
     "User", 
@@ -13,8 +7,6 @@ __all__ = [
     "OAuthIdentity", 
     "Plan", 
     "UserPlan",
-    "PaymentTransaction",
-    "TransactionStatus",
     "UserSubscription"
 ]
 

@@ -6,6 +6,7 @@ import {
     MdSmartToy,
   } from "react-icons/md"
 import { Link } from "react-router-dom"
+import { useAuth } from "@/Hook/AuthContext"
   
   /* ------------------------------------------------------------------ */
   /* Option Card Component                                               */
@@ -89,6 +90,10 @@ import { Link } from "react-router-dom"
   /* ------------------------------------------------------------------ */
   
   export default function PostJobMain() {
+    const { user } = useAuth()
+    // Show AI option only if user has premium plan (not standard)
+    const showAIOption = user?.plan !== "standard"
+
     return (
       <main className="grow bg-[#f6f7f8] dark:bg-background-dark">
         <div className="max-w-[1200px] mx-auto px-4 md:px-10 py-12 md:py-16">
@@ -102,9 +107,11 @@ import { Link } from "react-router-dom"
               time.
             </p>
           </div>
-  
+
           {/* Options */}
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className={`grid gap-8 max-w-4xl mx-auto ${
+            showAIOption ? "md:grid-cols-2" : "md:grid-cols-1"
+          }`}>
             <OptionCard
               title="Post Manually"
               description="Fill out the details yourself for complete control."
@@ -128,41 +135,43 @@ import { Link } from "react-router-dom"
                 </>,
               ]}
             />
-  
-            <OptionCard
-              title="Post with AI"
-              description="Let our AI write the job description for you."
-              icon={<MdAutoAwesome size={32} />}
-              buttonText="Start with AI"
-              navigateto="/post/automate-post"
-              highlighted
-              features={[
-                <>
-                  <MdCheckCircle className="text-primary mt-0.5" />
-                  <span className="text-sm font-bold">
-                    Generates content in seconds
-                  </span>
-                </>,
-                <>
-                  <MdSmartToy className="text-primary mt-0.5" />
-                  <span className="text-sm">
-                    <strong>Optimized</strong> for search & candidates
-                  </span>
-                </>,
-                <>
-                  <MdCheckCircle className="text-primary mt-0.5" />
-                  <span className="text-sm">
-                    Suggests relevant skills automatically
-                  </span>
-                </>,
-                <>
-                  <MdCheckCircle className="text-primary mt-0.5" />
-                  <span className="text-sm">
-                    Review and edit before publishing
-                  </span>
-                </>,
-              ]}
-            />
+
+            {showAIOption && (
+              <OptionCard
+                title="Post with AI"
+                description="Let our AI write the job description for you."
+                icon={<MdAutoAwesome size={32} />}
+                buttonText="Start with AI"
+                navigateto="/post/automate-post"
+                highlighted
+                features={[
+                  <>
+                    <MdCheckCircle className="text-primary mt-0.5" />
+                    <span className="text-sm font-bold">
+                      Generates content in seconds
+                    </span>
+                  </>,
+                  <>
+                    <MdSmartToy className="text-primary mt-0.5" />
+                    <span className="text-sm">
+                      <strong>Optimized</strong> for search & candidates
+                    </span>
+                  </>,
+                  <>
+                    <MdCheckCircle className="text-primary mt-0.5" />
+                    <span className="text-sm">
+                      Suggests relevant skills automatically
+                    </span>
+                  </>,
+                  <>
+                    <MdCheckCircle className="text-primary mt-0.5" />
+                    <span className="text-sm">
+                      Review and edit before publishing
+                    </span>
+                  </>,
+                ]}
+              />
+            )}
           </div>
   
           {/* FAQ */}

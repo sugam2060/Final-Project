@@ -19,42 +19,43 @@ interface PricingCardPremiumProps {
 
 export function PricingCardPremium({ plan }: PricingCardPremiumProps) {
   const { user } = useAuth();
+  
+  // Disable premium card only if user already has premium plan
+  const isDisabled = user?.plan === "premium";
 
   const paymentMutation = useMutation({
     mutationFn: initiatePayment,
     onSuccess: (data) => {
-      console.log("Payment initiation successful:", data);
-      if (data.payment_url && data.form_data) {
-        try {
-          // Submit form to eSewa
-          submitEsewaPayment(data);
-          toast.info("Redirecting to payment gateway...");
-        } catch (error) {
-          console.error("Error submitting payment form:", error);
-          toast.error("Failed to redirect to payment gateway. Please try again.");
-        }
+      if (data.url && data.parameters) {
+        submitEsewaPayment(data);
+        toast.info("Redirecting to payment gateway...");
       } else {
-        console.error("Invalid payment data:", data);
         toast.error("Payment data not received");
       }
     },
     onError: (error: Error) => {
-      console.error("Payment initiation error:", error);
       toast.error(error.message || "Failed to initiate payment");
     },
   });
 
   const handlePayment = () => {
+    if (isDisabled) {
+      toast.info("You already have Premium plan");
+      return;
+    }
+
     if (!user) {
       toast.error("Please login to continue");
       return;
     }
 
+    if (!plan) {
+      toast.error("Plan information not available");
+      return;
+    }
+
     paymentMutation.mutate({
-      plan: plan?.plan_name ?? "premium",
-      amount: plan?.price ?? 1000.0,
-      product_name:
-        plan?.description ?? "Premium Plan - Monthly Subscription with AI",
+      plan: plan.plan_name,
     });
   };
 
@@ -96,9 +97,13 @@ export function PricingCardPremium({ plan }: PricingCardPremiumProps) {
       <Button 
         className="mb-10 py-6 text-base shadow-lg shadow-primary/30"
         onClick={handlePayment}
-        disabled={paymentMutation.isPending}
+        disabled={paymentMutation.isPending || isDisabled}
       >
-        {paymentMutation.isPending ? "Processing..." : "Select Premium"}
+        {paymentMutation.isPending 
+          ? "Processing..." 
+          : isDisabled 
+          ? "Current Plan"
+          : "Select Premium"}
       </Button>
 
       <div className="space-y-4">
