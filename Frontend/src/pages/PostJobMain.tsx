@@ -92,7 +92,9 @@ import { useAuth } from "@/Hook/AuthContext"
   export default function PostJobMain() {
     const { user } = useAuth()
     // Show AI option only if user has premium plan (not standard)
-    const showAIOption = user?.plan !== "standard"
+    const showAIOption = user?.plan === "premium"
+    // Allow manual posting for users with standard or premium plan
+    const canPostManually = user?.plan === "standard" || user?.plan === "premium"
 
     return (
       <main className="grow bg-[#f6f7f8] dark:bg-background-dark">
@@ -112,29 +114,31 @@ import { useAuth } from "@/Hook/AuthContext"
           <div className={`grid gap-8 max-w-4xl mx-auto ${
             showAIOption ? "md:grid-cols-2" : "md:grid-cols-1"
           }`}>
-            <OptionCard
-              title="Post Manually"
-              description="Fill out the details yourself for complete control."
-              icon={<MdEditDocument size={32} />}
-              buttonText="Start Manually"
-              navigateto="/post/manual-post"
-              features={[
-                <>
-                  <MdCheck className="text-gray-400 mt-0.5" />
-                  <span className="text-sm">
-                    Full control over formatting & structure
-                  </span>
-                </>,
-                <>
-                  <MdCheck className="text-gray-400 mt-0.5" />
-                  <span className="text-sm">Start with a blank canvas</span>
-                </>,
-                <>
-                  <MdCheck className="text-gray-400 mt-0.5" />
-                  <span className="text-sm">Good for custom roles</span>
-                </>,
-              ]}
-            />
+            {canPostManually && (
+              <OptionCard
+                title="Post Manually"
+                description="Fill out the details yourself for complete control."
+                icon={<MdEditDocument size={32} />}
+                buttonText="Start Manually"
+                navigateto="/post/manual-post"
+                features={[
+                  <>
+                    <MdCheck className="text-gray-400 mt-0.5" />
+                    <span className="text-sm">
+                      Full control over formatting & structure
+                    </span>
+                  </>,
+                  <>
+                    <MdCheck className="text-gray-400 mt-0.5" />
+                    <span className="text-sm">Start with a blank canvas</span>
+                  </>,
+                  <>
+                    <MdCheck className="text-gray-400 mt-0.5" />
+                    <span className="text-sm">Good for custom roles</span>
+                  </>,
+                ]}
+              />
+            )}
 
             {showAIOption && (
               <OptionCard

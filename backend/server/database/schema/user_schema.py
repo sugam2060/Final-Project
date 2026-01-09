@@ -1,9 +1,12 @@
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlalchemy import UniqueConstraint
+
+if TYPE_CHECKING:
+    from database.schema.job_schema import Job
 
 
 class UserRole(str, Enum):
@@ -29,6 +32,10 @@ class User(SQLModel, table=True):
     )
     identities: List["OAuthIdentity"] = Relationship(
         back_populates="user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    posted_jobs: List["Job"] = Relationship(
+        back_populates="employer",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
 

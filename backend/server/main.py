@@ -9,11 +9,23 @@ from routes.auth.logout import router as logout_router
 from routes.plan.plan import router as plan_router
 from routes.payment.payment_initialize import router as payment_router
 from routes.payment.payment_callback import router as payment_callback_router
+from routes.job.job_get import router as job_get_router
+from routes.job.job_post import router as job_post_router
 
 
 from config import settings
 from database.db import engine
 from routes.auth.google import router as google_auth_router
+
+# Import all schemas to ensure they're registered with SQLModel.metadata
+from database.schema import (
+    User,
+    OAuthIdentity,
+    Plan,
+    UserSubscription,
+    Job,
+    JobApplication,
+)
 
 
 # -----------------------------
@@ -70,6 +82,8 @@ app.include_router(logout_router)
 app.include_router(plan_router)
 app.include_router(payment_router)
 app.include_router(payment_callback_router)
+app.include_router(job_get_router)
+app.include_router(job_post_router)
 
 
 # -----------------------------

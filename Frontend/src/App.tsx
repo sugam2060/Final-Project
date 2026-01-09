@@ -6,7 +6,12 @@ import SocialLoginPage from "@/pages/LoginPage";
 import PricingPage from "@/pages/PricingPage";
 import PostJobMain from "@/pages/PostJobMain";
 import CreateJobForm from "@/pages/ManualJobCreate";
+import ViewJobs from "@/pages/ViewJobs";
+import EditJob from "@/pages/EditJob";
+import JobListing from "@/pages/JobListing";
+import JobDetail from "@/pages/JobDetail";
 import Protected from "@/components/layout/Protected";
+import ProtectedRole from "@/components/layout/ProtectedRole";
 import { useAuth } from "@/Hook/AuthContext";
 import AIJobPosting from "./pages/AIJobPosting";
 
@@ -57,6 +62,26 @@ function App() {
 
       <Route path="/login" element={<SocialLoginPage />} />
 
+      {/* Public Job Listing */}
+      <Route
+        path="/jobs/browse"
+        element={
+          <Layout>
+            <JobListing />
+          </Layout>
+        }
+      />
+
+      {/* Public Job Detail */}
+      <Route
+        path="/jobs/view/:id"
+        element={
+          <Layout>
+            <JobDetail />
+          </Layout>
+        }
+      />
+
       {/* Protected single route */}
       <Route
         path="/plans"
@@ -87,6 +112,30 @@ function App() {
         <Route path="manual-post" element={<CreateJobForm />} />
         <Route path="automate-post" element={<AIJobPosting/>} />
       </Route>
+
+      {/* 🔐 Protected View Jobs route (role: both) */}
+      <Route
+        path="/jobs"
+        element={
+          <Layout>
+            <ProtectedRole requiredRole="both">
+              <ViewJobs />
+            </ProtectedRole>
+          </Layout>
+        }
+      />
+
+      {/* 🔐 Protected Edit Job route (role: both) */}
+      <Route
+        path="/job/:id"
+        element={
+          <Layout>
+            <ProtectedRole requiredRole="both">
+              <EditJob />
+            </ProtectedRole>
+          </Layout>
+        }
+      />
     </Routes>
   );
 }

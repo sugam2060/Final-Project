@@ -52,9 +52,14 @@ const Header = () => {
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-8">
           <nav className="flex items-center gap-8">
-            <a className="text-sm font-medium hover:text-primary" href="#">
-              Jobs
-            </a>
+            <Link className="text-sm font-medium hover:text-primary" to={"/jobs/browse"}>
+              Browse Jobs
+            </Link>
+            {user?.role === "both" && (
+              <Link className="text-sm font-medium hover:text-primary" to={"/jobs"}>
+                My Jobs
+              </Link>
+            )}
             <Link className="text-sm font-medium hover:text-primary" to={"/plans"}>
               Plans
             </Link>
@@ -117,9 +122,14 @@ const Header = () => {
               </div>
 
               <nav className="flex flex-col gap-4">
-                <a className="text-sm font-medium hover:text-primary" href="#">
-                  Jobs
-                </a>
+                <Link className="text-sm font-medium hover:text-primary" to={"/jobs/browse"}>
+                  Browse Jobs
+                </Link>
+                {user?.role === "both" && (
+                  <Link className="text-sm font-medium hover:text-primary" to={"/jobs"}>
+                    My Jobs
+                  </Link>
+                )}
                 <Link className="text-sm font-medium hover:text-primary" to={"/plans"}>
                   Plans
                 </Link>

@@ -1,75 +1,95 @@
-"use client"
+import { useNavigate } from "react-router-dom"
+import { useMutation } from "@tanstack/react-query"
+import { useRef } from "react"
+import { CreateJobForm, DraftPublishActions } from "@/components/create_job"
+import type { JobFormValues, CreateJobFormInstance } from "@/components/create_job"
+import { createJob, type JobCreateRequest } from "@/api/job"
+import { toast } from "sonner"
 
-import { z } from "zod"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
+export default function ManualJobCreate() {
+  const navigate = useNavigate()
+  const formRef = useRef<CreateJobFormInstance | null>(null)
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-
-/* ------------------------------------------------------------------ */
-/* Zod Schema                                                          */
-/* ------------------------------------------------------------------ */
-
-const jobFormSchema = z.object({
-  jobTitle: z.string().min(2, "Job title is required"),
-  companyName: z.string().min(2, "Company name is required"),
-  location: z.string().min(2, "Work location is required"),
-  employmentType: z.enum([
-    "full-time",
-    "part-time",
-    "contract",
-    "freelance",
-    "internship",
-  ]),
-  experienceLevel: z.enum([
-    "entry",
-    "mid",
-    "senior",
-    "executive",
-  ]),
-  deadline: z.string().optional(),
-  description: z.string().min(20, "Description must be at least 20 characters"),
-})
-
-type JobFormValues = z.infer<typeof jobFormSchema>
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
-
-export default function CreateJobForm() {
-  const form = useForm<JobFormValues>({
-    resolver: zodResolver(jobFormSchema),
-    defaultValues: {
-      jobTitle: "",
-      companyName: "",
-      location: "",
-      employmentType: "full-time",
-      experienceLevel: "entry",
-      deadline: "",
-      description: "",
+  const createJobMutation = useMutation({
+    mutationFn: (jobData: JobCreateRequest) => createJob(jobData),
+    onSuccess: (response, variables) => {
+      const statusText = variables.status === "published" ? "published" : "saved as draft"
+      toast.success("Job posting created successfully!", {
+        description: `Job "${response.title}" has been ${statusText}.`,
+      })
+      navigate("/jobs")
+    },
+    onError: (error: Error) => {
+      console.error("Error creating job:", error)
+      toast.error("Failed to create job posting", {
+        description: error.message || "An unexpected error occurred",
+      })
     },
   })
 
-  function onSubmit(values: JobFormValues) {
-    console.log("Job submitted:", values)
+  function createJobData(values: JobFormValues, status: "draft" | "published"): JobCreateRequest {
+    return {
+      title: values.jobTitle,
+      company_name: values.companyName,
+      location: values.location,
+      work_mode: values.workMode,
+      description: values.description,
+      employment_type: values.employmentType,
+      experience_level: values.experienceLevel,
+      category: values.category || undefined,
+      industry: values.industry || undefined,
+      salary_min: values.salaryMin && values.salaryMin !== "" ? Number(values.salaryMin) : undefined,
+      salary_max: values.salaryMax && values.salaryMax !== "" ? Number(values.salaryMax) : undefined,
+      salary_currency: values.salaryCurrency,
+      salary_period: values.salaryPeriod || undefined,
+      is_salary_negotiable: values.isSalaryNegotiable,
+      application_deadline: values.applicationDeadline
+        ? new Date(values.applicationDeadline).toISOString()
+        : undefined,
+      expires_at: values.expiresAt
+        ? new Date(values.expiresAt).toISOString()
+        : undefined,
+      status,
+    }
+  }
+
+  async function handleSaveDraft() {
+    if (!formRef.current) return
+    
+    const isValid = await formRef.current.trigger()
+    if (!isValid) {
+      toast.error("Please fix form errors before saving")
+      return
+    }
+
+    const values = formRef.current.getValues()
+    const jobData = createJobData(values, "draft")
+    createJobMutation.mutate(jobData)
+  }
+
+  async function handlePublish() {
+    if (!formRef.current) return
+    
+    const isValid = await formRef.current.trigger()
+    if (!isValid) {
+      toast.error("Please fix form errors before publishing")
+      return
+    }
+
+    const values = formRef.current.getValues()
+    const jobData = createJobData(values, "published")
+    createJobMutation.mutate(jobData)
+  }
+
+  function handleCancel() {
+    navigate(-1) // Go back to previous page
+  }
+
+  // This is a workaround to get the form instance
+  // We'll use a callback ref approach
+  function handleFormSubmit(values: JobFormValues) {
+    // This won't be called directly, but we need it for the form
+    // The actual submission is handled by the buttons
   }
 
   return (
@@ -81,172 +101,22 @@ export default function CreateJobForm() {
         </p>
       </div>
 
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-8 bg-background border rounded-xl p-6"
-        >
-          {/* ---------------- Basic Info ---------------- */}
-
-          <section className="space-y-6">
-            <h2 className="text-lg font-bold">Basic Information</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="jobTitle"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Senior Product Designer" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="companyName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Company Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Acme Corp" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="location"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Work Location</FormLabel>
-                  <FormControl>
-                    <Input placeholder="New York, NY (Remote)" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </section>
-
-          {/* ---------------- Job Details ---------------- */}
-
-          <section className="space-y-6">
-            <h2 className="text-lg font-bold">Job Details</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <FormField
-                control={form.control}
-                name="employmentType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Employment Type</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="full-time">Full-time</SelectItem>
-                        <SelectItem value="part-time">Part-time</SelectItem>
-                        <SelectItem value="contract">Contract</SelectItem>
-                        <SelectItem value="freelance">Freelance</SelectItem>
-                        <SelectItem value="internship">Internship</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="experienceLevel"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Experience Level</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select level" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="entry">Entry Level</SelectItem>
-                        <SelectItem value="mid">Mid Level</SelectItem>
-                        <SelectItem value="senior">Senior Level</SelectItem>
-                        <SelectItem value="executive">Executive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="deadline"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Application Deadline</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </section>
-
-          {/* ---------------- Description ---------------- */}
-
-          <section className="space-y-6">
-            <h2 className="text-lg font-bold">Description & Requirements</h2>
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Job Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Describe responsibilities, requirements, and benefits..."
-                      className="min-h-[180px]"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </section>
-
-          {/* ---------------- Actions ---------------- */}
-
-          <div className="flex justify-end gap-4 pt-4">
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-            <Button type="submit">Submit Job</Button>
-          </div>
-        </form>
-      </Form>
+      <CreateJobForm 
+        onSubmit={handleFormSubmit} 
+        onCancel={handleCancel}
+        isSubmitting={createJobMutation.isPending}
+        onFormReady={(form) => {
+          formRef.current = form
+        }}
+        customActions={
+          <DraftPublishActions
+            onSaveDraft={handleSaveDraft}
+            onPublish={handlePublish}
+            onCancel={handleCancel}
+            isSubmitting={createJobMutation.isPending}
+          />
+        }
+      />
     </div>
   )
 }
