@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { getMyJobs } from "@/api/job";
 import {
@@ -8,8 +8,19 @@ import {
   JobList,
   InfiniteScrollTrigger,
 } from "@/components/jobs";
+import { PAGE_SIZE, INTERSECTION_THRESHOLD } from "./constants";
 
-export default function ViewJobs() {
+/**
+ * ViewJobs Page Component
+ * 
+ * Displays user's job postings with infinite scroll.
+ * 
+ * Features:
+ * - Infinite scroll loading
+ * - Job list display
+ * - Error handling
+ */
+function ViewJobs() {
   const observerTarget = useRef<HTMLDivElement>(null);
 
   const {
@@ -22,12 +33,23 @@ export default function ViewJobs() {
     error,
   } = useInfiniteQuery({
     queryKey: ["my-jobs"],
-    queryFn: ({ pageParam = 1 }) => getMyJobs(pageParam, 10),
+    queryFn: ({ pageParam = 1 }) => getMyJobs(pageParam, PAGE_SIZE),
     getNextPageParam: (lastPage) => {
       return lastPage.has_next ? lastPage.page + 1 : undefined;
     },
     initialPageParam: 1,
   });
+
+  // Memoize computed values BEFORE any conditional returns
+  // This ensures hooks are always called in the same order
+  const allJobs = useMemo(
+    () => data?.pages.flatMap((page) => page.jobs) ?? [],
+    [data?.pages]
+  );
+  const totalJobs = useMemo(
+    () => data?.pages[0]?.total ?? 0,
+    [data?.pages]
+  );
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -37,7 +59,7 @@ export default function ViewJobs() {
           fetchNextPage();
         }
       },
-      { threshold: 0.1 }
+      { threshold: INTERSECTION_THRESHOLD }
     );
 
     const currentTarget = observerTarget.current;
@@ -60,9 +82,6 @@ export default function ViewJobs() {
     return <ViewJobsError error={error} />;
   }
 
-  const allJobs = data?.pages.flatMap((page) => page.jobs) ?? [];
-  const totalJobs = data?.pages[0]?.total ?? 0;
-
   return (
     <div className="max-w-6xl mx-auto py-10 px-4">
       <ViewJobsHeader totalJobs={totalJobs} />
@@ -76,4 +95,6 @@ export default function ViewJobs() {
     </div>
   );
 }
+
+export default memo(ViewJobs);
 

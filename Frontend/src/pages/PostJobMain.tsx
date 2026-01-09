@@ -1,28 +1,29 @@
+import { memo, useMemo } from "react";
 import {
-    MdEditDocument,
-    MdAutoAwesome,
-    MdCheck,
-    MdCheckCircle,
-    MdSmartToy,
-  } from "react-icons/md"
-import { Link } from "react-router-dom"
-import { useAuth } from "@/Hook/AuthContext"
-  
-  /* ------------------------------------------------------------------ */
-  /* Option Card Component                                               */
-  /* ------------------------------------------------------------------ */
-  
-  type OptionCardProps = {
-    title: string
-    description: string
-    icon: React.ReactNode
-    navigateto:string
-    features: React.ReactNode[]
-    buttonText: string
-    highlighted?: boolean
-  }
-  
-  function OptionCard({
+  MdEditDocument,
+  MdAutoAwesome,
+  MdCheck,
+  MdCheckCircle,
+  MdSmartToy,
+} from "react-icons/md";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/Hook/AuthContext";
+
+/* ------------------------------------------------------------------ */
+/* Option Card Component                                               */
+/* ------------------------------------------------------------------ */
+
+interface OptionCardProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  navigateto: string;
+  features: React.ReactNode[];
+  buttonText: string;
+  highlighted?: boolean;
+}
+
+const OptionCard = memo(function OptionCard({
     title,
     description,
     icon,
@@ -82,19 +83,37 @@ import { useAuth } from "@/Hook/AuthContext"
           {buttonText}
         </Link>
       </div>
-    )
+    );
   }
+);
+
+OptionCard.displayName = "OptionCard";
+
+/* ------------------------------------------------------------------ */
+/* Main Page                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * PostJobMain Page Component
+ * 
+ * Main page for job posting with options for manual and AI-powered posting.
+ * 
+ * Features:
+ * - Plan-based feature visibility
+ * - Option cards for posting methods
+ * - FAQ section
+ */
+function PostJobMain() {
+  const { user } = useAuth();
   
-  /* ------------------------------------------------------------------ */
-  /* Main Page                                                           */
-  /* ------------------------------------------------------------------ */
+  // Show AI option only if user has premium plan (not standard)
+  const showAIOption = useMemo(() => user?.plan === "premium", [user?.plan]);
   
-  export default function PostJobMain() {
-    const { user } = useAuth()
-    // Show AI option only if user has premium plan (not standard)
-    const showAIOption = user?.plan === "premium"
-    // Allow manual posting for users with standard or premium plan
-    const canPostManually = user?.plan === "standard" || user?.plan === "premium"
+  // Allow manual posting for users with standard or premium plan
+  const canPostManually = useMemo(
+    () => user?.plan === "standard" || user?.plan === "premium",
+    [user?.plan]
+  );
 
     return (
       <main className="grow bg-[#f6f7f8] dark:bg-background-dark">
@@ -202,6 +221,8 @@ import { useAuth } from "@/Hook/AuthContext"
           </div>
         </div>
       </main>
-    )
-  }
+    );
+}
+
+export default memo(PostJobMain);
   

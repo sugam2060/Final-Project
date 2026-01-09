@@ -1,47 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
+from sqlalchemy import update
 
-from database.schema import (
-    UserSubscription,
-    Plan,
-    Job,
-)
-from .job_models import JobResponse
-
-
-async def get_user_active_plan(
-    session: AsyncSession,
-    user_id: uuid.UUID
-) -> Optional[str]:
-    """
-    Get the active plan name for a user from their active subscription.
-    
-    Returns:
-        Optional[str]: Plan name ("standard" or "premium") or None if no active subscription
-    """
-    current_time = datetime.now(timezone.utc).replace(tzinfo=None)
-    
-    stmt = (
-        select(UserSubscription, Plan)
-        .join(Plan, UserSubscription.plan_id == Plan.id)
-        .where(
-            UserSubscription.user_id == user_id,
-            UserSubscription.is_active == True,
-            UserSubscription.expires_at > current_time
-        )
-        .order_by(UserSubscription.expires_at.desc())
-    )
-    result = await session.execute(stmt)
-    subscription_row = result.first()
-    
-    if subscription_row:
-        subscription, plan = subscription_row
-        return plan.plan_name.value  # Returns "standard" or "premium"
-    
-    return None
+from database.schema import Job
+from pydantics.job_types import JobResponse
+# Import shared utility from auth module
+from routes.auth.auth_utils import get_user_active_plan
 
 
 def normalize_datetime(dt: Optional[datetime]) -> Optional[datetime]:
@@ -52,6 +18,96 @@ def normalize_datetime(dt: Optional[datetime]) -> Optional[datetime]:
         # Convert to UTC and remove timezone info
         return dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
+
+
+def validate_salary_range(salary_min: Optional[float], salary_max: Optional[float]) -> None:
+    """
+    Validate that salary_min is not greater than salary_max.
+    
+    Raises:
+        HTTPException: 400 if validation fails
+    """
+    if salary_min is not None and salary_max is not None:
+        if salary_min > salary_max:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="salary_min cannot be greater than salary_max"
+            )
+
+
+def validate_deadline_dates(
+    application_deadline: Optional[datetime],
+    expires_at: Optional[datetime],
+    current_time: datetime,
+) -> None:
+    """
+    Validate deadline dates are not in the past and application_deadline is before expires_at.
+    
+    Raises:
+        HTTPException: 400 if validation fails
+    """
+    from fastapi import HTTPException, status
+    
+    if application_deadline and application_deadline < current_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="application_deadline cannot be in the past"
+        )
+    
+    if expires_at and expires_at < current_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="expires_at cannot be in the past"
+        )
+    
+    if application_deadline and expires_at:
+        if application_deadline > expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="application_deadline cannot be after expires_at"
+            )
+
+
+async def increment_job_view_counts(
+    session: AsyncSession,
+    job_ids: list[uuid.UUID],
+) -> None:
+    """
+    Efficiently increment view counts for multiple jobs using a single bulk update.
+    
+    This is more efficient than updating each job individually.
+    """
+    if not job_ids:
+        return
+    
+    # Use SQLAlchemy update statement for bulk operation
+    stmt = (
+        update(Job)
+        .where(Job.id.in_(job_ids))
+        .values(view_count=Job.view_count + 1)
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def increment_single_job_view_count(
+    session: AsyncSession,
+    job_id: uuid.UUID,
+) -> None:
+    """
+    Increment view count for a single job using database-level increment.
+    
+    This is more efficient than updating the object directly as it uses
+    a single SQL UPDATE statement.
+    """
+    stmt = (
+        update(Job)
+        .where(Job.id == job_id)
+        .values(view_count=Job.view_count + 1)
+    )
+    await session.execute(stmt)
+    await session.commit()
 
 
 def job_to_response(job: Job) -> JobResponse:

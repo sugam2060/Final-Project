@@ -1,23 +1,40 @@
+import { memo, useMemo } from "react";
+import { STATUS_BADGE_STYLES, type JobStatus } from "./constants";
+
 interface JobStatusBadgeProps {
   status: string;
 }
 
-export function JobStatusBadge({ status }: JobStatusBadgeProps) {
-  const statusStyles = {
-    draft: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-    published: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    closed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-    expired: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  };
+/**
+ * JobStatusBadge Component
+ * 
+ * Displays a colored badge indicating the job posting status.
+ * 
+ * Features:
+ * - Color-coded status indicators
+ * - Accessible labels
+ */
+export const JobStatusBadge = memo(function JobStatusBadge({ status }: JobStatusBadgeProps) {
+  // Memoize status style and label
+  const { style, label } = useMemo(() => {
+    const normalizedStatus = status.toLowerCase() as JobStatus;
+    const statusStyle = STATUS_BADGE_STYLES[normalizedStatus] || STATUS_BADGE_STYLES.draft;
+    const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+    
+    return {
+      style: statusStyle,
+      label: statusLabel,
+    };
+  }, [status]);
 
   return (
     <span
-      className={`px-2 py-1 text-xs font-semibold rounded-full ${
-        statusStyles[status as keyof typeof statusStyles] || statusStyles.draft
-      }`}
+      className={`px-2 py-1 text-xs font-semibold rounded-full ${style}`}
+      role="status"
+      aria-label={`Job status: ${label}`}
     >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {label}
     </span>
   );
-}
+})
 

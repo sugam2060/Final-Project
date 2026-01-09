@@ -1,12 +1,23 @@
-import { useNavigate } from "react-router-dom"
-import { useMutation } from "@tanstack/react-query"
-import { useRef } from "react"
-import { CreateJobForm, DraftPublishActions } from "@/components/create_job"
-import type { JobFormValues, CreateJobFormInstance } from "@/components/create_job"
-import { createJob, type JobCreateRequest } from "@/api/job"
-import { toast } from "sonner"
+import { memo, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { CreateJobForm, DraftPublishActions } from "@/components/create_job";
+import type { JobFormValues, CreateJobFormInstance } from "@/components/create_job";
+import { createJob, type JobCreateRequest } from "@/api/job";
+import { toast } from "sonner";
 
-export default function ManualJobCreate() {
+/**
+ * ManualJobCreate Page Component
+ * 
+ * Allows creating new job postings manually.
+ * 
+ * Features:
+ * - Job creation form
+ * - Draft and publish actions
+ * - Form validation
+ * - Error handling
+ */
+function ManualJobCreate() {
   const navigate = useNavigate()
   const formRef = useRef<CreateJobFormInstance | null>(null)
 
@@ -81,16 +92,16 @@ export default function ManualJobCreate() {
     createJobMutation.mutate(jobData)
   }
 
-  function handleCancel() {
-    navigate(-1) // Go back to previous page
-  }
+  const handleCancel = useCallback(() => {
+    navigate(-1); // Go back to previous page
+  }, [navigate]);
 
   // This is a workaround to get the form instance
   // We'll use a callback ref approach
-  function handleFormSubmit(values: JobFormValues) {
+  const handleFormSubmit = useCallback((values: JobFormValues) => {
     // This won't be called directly, but we need it for the form
     // The actual submission is handled by the buttons
-  }
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto py-10 px-4">
@@ -118,5 +129,7 @@ export default function ManualJobCreate() {
         }
       />
     </div>
-  )
+  );
 }
+
+export default memo(ManualJobCreate);

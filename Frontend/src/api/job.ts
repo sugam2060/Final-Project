@@ -181,6 +181,24 @@ export const updateJobStatus = async (
   return response.json();
 };
 
+/**
+ * Delete a job posting
+ */
+export const deleteJob = async (jobId: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Failed to delete job");
+  }
+};
+
 // Public job listing API (no authentication required)
 export interface PublicJobsFilters {
   category?: string;

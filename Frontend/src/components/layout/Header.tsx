@@ -1,30 +1,49 @@
-import { useState } from "react";
+import { useState, memo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaBriefcase, FaBars, FaTimes } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
-import axios from "axios";
 import { Button } from "../ui/button";
 import UserAvatar from "./UserAvatar";
 import { useAuth } from "@/Hook/AuthContext";
+import { API_ENDPOINTS } from "@/config/api";
 
+// Navigation links configuration
+interface NavLink {
+  to: string;
+  label: string;
+  requiresRole?: "both";
+}
 
-const Header = () => {
+const NAV_LINKS: NavLink[] = [
+  { to: "/jobs/browse", label: "Browse Jobs" },
+  { to: "/jobs", label: "My Jobs", requiresRole: "both" },
+  { to: "/plans", label: "Plans" },
+  { to: "/post", label: "Post a Job", requiresRole: "both" },
+];
+
+/**
+ * Header Component
+ * 
+ * Main navigation header with responsive mobile menu.
+ * 
+ * Features:
+ * - Responsive design (desktop and mobile)
+ * - User authentication state
+ * - Role-based navigation
+ * - Logout functionality
+ */
+const Header = memo(function Header() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
-
   const { user, setUser } = useAuth();
 
-
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       // Call backend logout API
-      await axios.post(
-        "http://localhost:8000/api/auth/logout",
-        {},
-        {
-          withCredentials: true, // Important: sends cookies
-        }
-      );
+      await fetch(API_ENDPOINTS.AUTH.LOGOUT, {
+        method: "POST",
+        credentials: "include", // Important: sends cookies
+      });
     } catch (error) {
       console.error("Logout error:", error);
       // Continue with logout even if API call fails
@@ -36,7 +55,15 @@ const Header = () => {
       // Navigate to login
       navigate("/login");
     }
-  };
+  }, [navigate, setUser]);
+
+  const toggleMenu = useCallback(() => {
+    setIsOpen((prev) => !prev);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 bg-white dark:bg-background-dark border-b border-border px-4 md:px-10 py-3 shadow-sm">
@@ -49,49 +76,52 @@ const Header = () => {
           </div>
         </Link>
 
-        {/* Desktop */}
+        {/* Desktop Navigation & Auth Section - Right aligned */}
         <div className="hidden md:flex items-center gap-8">
-          <nav className="flex items-center gap-8">
-            <Link className="text-sm font-medium hover:text-primary" to={"/jobs/browse"}>
-              Browse Jobs
-            </Link>
-            {user?.role === "both" && (
-              <Link className="text-sm font-medium hover:text-primary" to={"/jobs"}>
-                My Jobs
-              </Link>
-            )}
-            <Link className="text-sm font-medium hover:text-primary" to={"/plans"}>
-              Plans
-            </Link>
-            {user?.role === "both" && (
-              <Link className="text-sm font-medium hover:text-primary" to={"/post"}>
-                Post a Job
-              </Link>
-            )}
+          <nav className="flex items-center gap-8" aria-label="Main navigation">
+            {NAV_LINKS.map((link) => {
+              if (link.requiresRole && user?.role !== link.requiresRole) {
+                return null;
+              }
+              return (
+                <Link
+                  key={link.to}
+                  className="text-sm font-medium hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded px-1"
+                  to={link.to}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
           </nav>
 
-          {user ? (
-            <UserAvatar
-              name={user.name}
-              email={user.email}
-              avatar_url={user.avatar_url}
-              showMenu
-              onLogout={handleLogout}
-            />
-          ) : (
-            <Link to="/login">
-              <Button>Sign In</Button>
-            </Link>
-          )}
+          {/* Desktop Auth Section */}
+          <div className="flex items-center">
+            {user ? (
+              <UserAvatar
+                name={user.name}
+                email={user.email}
+                avatar_url={user.avatar_url}
+                showMenu
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Link to="/login">
+                <Button aria-label="Sign in">Sign In</Button>
+              </Link>
+            )}
+          </div>
         </div>
 
-        {/* Mobile Button */}
+        {/* Mobile Menu Button */}
         <button
-          className="md:hidden text-xl"
-          onClick={() => setIsOpen(true)}
+          type="button"
+          className="md:hidden text-xl focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-1"
+          onClick={toggleMenu}
           aria-label="Open menu"
+          aria-expanded={isOpen}
         >
-          <FaBars />
+          <FaBars aria-hidden="true" />
         </button>
       </div>
 
@@ -104,7 +134,8 @@ const Header = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
+              onClick={closeMenu}
+              aria-hidden="true"
             />
 
             <motion.div
@@ -113,31 +144,38 @@ const Header = () => {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Navigation menu"
             >
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-lg">Menu</h3>
-                <button onClick={() => setIsOpen(false)}>
-                  <FaTimes />
+                <button
+                  type="button"
+                  onClick={closeMenu}
+                  aria-label="Close menu"
+                  className="focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded p-1"
+                >
+                  <FaTimes aria-hidden="true" />
                 </button>
               </div>
 
-              <nav className="flex flex-col gap-4">
-                <Link className="text-sm font-medium hover:text-primary" to={"/jobs/browse"}>
-                  Browse Jobs
-                </Link>
-                {user?.role === "both" && (
-                  <Link className="text-sm font-medium hover:text-primary" to={"/jobs"}>
-                    My Jobs
-                  </Link>
-                )}
-                <Link className="text-sm font-medium hover:text-primary" to={"/plans"}>
-                  Plans
-                </Link>
-                {user?.role === "both" && (
-                  <Link className="text-sm font-medium hover:text-primary" to={"/post"}>
-                    Post a Job
-                  </Link>
-                )}
+              <nav className="flex flex-col gap-4" aria-label="Mobile navigation">
+                {NAV_LINKS.map((link) => {
+                  if (link.requiresRole && user?.role !== link.requiresRole) {
+                    return null;
+                  }
+                  return (
+                    <Link
+                      key={link.to}
+                      className="text-sm font-medium hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded px-1"
+                      to={link.to}
+                      onClick={closeMenu}
+                    >
+                      {link.label}
+                    </Link>
+                  );
+                })}
               </nav>
 
               <div className="mt-auto">
@@ -166,6 +204,8 @@ const Header = () => {
       </AnimatePresence>
     </header>
   );
-};
+});
+
+Header.displayName = "Header";
 
 export default Header;

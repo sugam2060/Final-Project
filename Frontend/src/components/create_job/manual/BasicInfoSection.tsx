@@ -1,3 +1,4 @@
+import { memo } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,12 +16,18 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import type { JobFormValues } from "./jobFormSchema"
+import { WORK_MODE_OPTIONS } from "./constants"
 
 interface BasicInfoSectionProps {
   form: UseFormReturn<JobFormValues>
 }
 
-export function BasicInfoSection({ form }: BasicInfoSectionProps) {
+/**
+ * BasicInfoSection Component
+ * 
+ * Form section for basic job information (title, company, location, work mode, category, industry).
+ */
+export const BasicInfoSection = memo(function BasicInfoSection({ form }: BasicInfoSectionProps) {
   return (
     <section className="space-y-6">
       <h2 className="text-lg font-bold">Basic Information</h2>
@@ -78,7 +85,7 @@ export function BasicInfoSection({ form }: BasicInfoSectionProps) {
               <FormLabel>Work Mode</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                defaultValue={field.value}
+                value={field.value}
               >
                 <FormControl>
                   <SelectTrigger>
@@ -86,9 +93,11 @@ export function BasicInfoSection({ form }: BasicInfoSectionProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="remote">Remote</SelectItem>
-                  <SelectItem value="hybrid">Hybrid</SelectItem>
-                  <SelectItem value="onsite">Onsite</SelectItem>
+                  {WORK_MODE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -128,5 +137,5 @@ export function BasicInfoSection({ form }: BasicInfoSectionProps) {
       </div>
     </section>
   )
-}
+})
 

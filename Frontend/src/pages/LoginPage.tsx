@@ -1,9 +1,20 @@
+import { memo } from "react";
 import SocialLoginCard from "@/components/auth/SocialLoginCard";
 import AuthFooterLinks from "@/components/auth/AuthFooterLink";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
-const SocialLoginPage = () => {
+/**
+ * SocialLoginPage Component
+ * 
+ * Login page with social authentication options.
+ * 
+ * Features:
+ * - Social login options
+ * - Background pattern
+ * - Footer links
+ */
+const SocialLoginPage = memo(function SocialLoginPage() {
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden font-display bg-background-light dark:bg-background-dark text-[#111418] dark:text-white transition-colors duration-200">
       {/* Top Right Home Button */}
@@ -33,6 +44,8 @@ const SocialLoginPage = () => {
       </main>
     </div>
   );
-};
+});
+
+SocialLoginPage.displayName = "SocialLoginPage";
 
 export default SocialLoginPage;

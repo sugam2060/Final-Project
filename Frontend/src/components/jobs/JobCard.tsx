@@ -1,7 +1,9 @@
+import { memo, useCallback } from "react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateJobStatus } from "@/api/job";
+import { FiUsers, FiTrash2 } from "react-icons/fi";
+import { updateJobStatus, deleteJob } from "@/api/job";
 import { JobStatusBadge } from "./JobStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -12,6 +14,9 @@ interface JobCardProps {
   job: JobResponse;
 }
 
+/**
+ * Format date string to readable format
+ */
 function formatDate(dateString: string | null): string {
   if (!dateString) return "N/A";
   try {
@@ -21,7 +26,18 @@ function formatDate(dateString: string | null): string {
   }
 }
 
-export function JobCard({ job }: JobCardProps) {
+/**
+ * JobCard Component
+ * 
+ * Displays a single job posting card with details and actions.
+ * 
+ * Features:
+ * - Job details display
+ * - Publish action
+ * - Navigation to edit page
+ * - Status badge
+ */
+export const JobCard = memo(function JobCard({ job }: JobCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -40,21 +56,52 @@ export function JobCard({ job }: JobCardProps) {
     },
   });
 
-  const handleClick = () => {
-    navigate(`/job/${job.id}`);
-  };
+  const deleteJobMutation = useMutation({
+    mutationFn: () => deleteJob(job.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-jobs"] });
+      toast.success("Job deleted", {
+        description: `Job "${job.title}" has been deleted successfully.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to delete job", {
+        description: error.message || "An unexpected error occurred",
+      });
+    },
+  });
 
-  const handlePublish = (e: React.MouseEvent) => {
+  // Memoize handlers to prevent unnecessary re-renders
+  const handleClick = useCallback(() => {
+    navigate(`/job/${job.id}`);
+  }, [navigate, job.id]);
+
+  const handlePublish = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
     updateStatusMutation.mutate();
-  };
+  }, [updateStatusMutation]);
+
+  const handleViewApplications = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    navigate(`/job/applicant/${job.id}`);
+  }, [navigate, job.id]);
+
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    if (window.confirm(`Are you sure you want to delete "${job.title}"? This action cannot be undone and will also delete all associated applications and resumes.`)) {
+      deleteJobMutation.mutate();
+    }
+  }, [deleteJobMutation, job.title]);
 
   const isPublished = job.status === "published";
   const isUpdating = updateStatusMutation.isPending;
+  const isDeleting = deleteJobMutation.isPending;
+  const hasApplications = job.application_count > 0;
 
   return (
-    <div
+    <article
       className="border rounded-lg p-6 hover:shadow-md transition-shadow bg-card"
+      aria-label={`Job posting: ${job.title}`}
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
@@ -121,28 +168,61 @@ export function JobCard({ job }: JobCardProps) {
         </div>
       )}
 
-      <div className="mt-4 pt-4 border-t flex items-center justify-between gap-4">
-        <div
-          className="flex-1 cursor-pointer"
+      <div className="mt-4 pt-4 border-t flex items-center justify-between gap-4 flex-wrap">
+        <button
+          type="button"
+          className="flex-1 text-left cursor-pointer min-w-[200px]"
           onClick={handleClick}
+          aria-label={`Edit job: ${job.title}`}
         >
           <span className="text-sm text-muted-foreground hover:text-primary">
             Click to edit job details →
           </span>
-        </div>
-        <div onClick={(e) => e.stopPropagation()}>
+        </button>
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          {hasApplications && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleViewApplications}
+              disabled={isDeleting}
+              aria-label={`View ${job.application_count} application${job.application_count !== 1 ? "s" : ""} for ${job.title}`}
+            >
+              <FiUsers className="mr-2 h-4 w-4" aria-hidden="true" />
+              View Applications ({job.application_count})
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
             onClick={handlePublish}
-            disabled={isUpdating || isPublished}
+            disabled={isUpdating || isPublished || isDeleting}
+            aria-label={isPublished ? "Job is published" : "Publish job"}
+            aria-busy={isUpdating}
           >
-            {isUpdating ? <Spinner className="mr-2 h-3 w-3" /> : null}
+            {isUpdating ? <Spinner className="mr-2 h-3 w-3" aria-hidden="true" /> : null}
             {isPublished ? "Published" : "Publish"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={handleDelete}
+            disabled={isDeleting || isUpdating}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+            aria-label={`Delete job: ${job.title}`}
+            aria-busy={isDeleting}
+          >
+            {isDeleting ? (
+              <Spinner className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <FiTrash2 className="h-4 w-4" aria-hidden="true" />
+            )}
           </Button>
         </div>
       </div>
-    </div>
+    </article>
   );
-}
+})
 

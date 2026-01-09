@@ -3,18 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from typing import Optional
 from datetime import datetime, timezone
-import uuid
 
-from routes.auth.get_current_user import get_current_user
 from database.db import get_session
 from database.schema import (
     User,
     Job,
     JobStatus,
-    UserRole,
     UserPlan,
 )
-from .job_models import (
+from pydantics.job_types import (
     JobCreateRequest,
     JobUpdateRequest,
     JobStatusUpdateRequest,
@@ -24,7 +21,10 @@ from .job_utils import (
     get_user_active_plan,
     normalize_datetime,
     job_to_response,
+    validate_salary_range,
+    validate_deadline_dates,
 )
+from .job_dependencies import require_employer_role, require_job_ownership
 
 
 router = APIRouter(
@@ -36,7 +36,7 @@ router = APIRouter(
 @router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     job_data: JobCreateRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_employer_role),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -49,23 +49,16 @@ async def create_job(
     
     Args:
         job_data: Job posting details
-        user: Current authenticated user (from dependency)
+        user: Current authenticated user (from dependency, already validated for role)
         session: Database session
         
     Returns:
         JobResponse: Created job posting
         
     Raises:
-        HTTPException: 403 if user doesn't meet requirements
+        HTTPException: 403 if user doesn't have active subscription
         HTTPException: 400 if validation fails
     """
-    # Check user role
-    if user.role != UserRole.both:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only users with 'both' role (employer and employee) can post jobs. Please upgrade your account."
-        )
-    
     # Check user's active plan
     user_plan = await get_user_active_plan(session, user.id)
     
@@ -81,43 +74,18 @@ async def create_job(
             detail=f"Invalid plan '{user_plan}'. You need a standard or premium plan to post jobs."
         )
     
-    # Validate salary range if both are provided
-    if job_data.salary_min is not None and job_data.salary_max is not None:
-        if job_data.salary_min > job_data.salary_max:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="salary_min cannot be greater than salary_max"
-            )
+    # Validate salary range
+    validate_salary_range(job_data.salary_min, job_data.salary_max)
     
     # Validate deadline dates
     current_time = datetime.now(timezone.utc).replace(tzinfo=None)
-    
     normalized_deadline = normalize_datetime(job_data.application_deadline)
     normalized_expires_at = normalize_datetime(job_data.expires_at)
     
-    if normalized_deadline and normalized_deadline < current_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="application_deadline cannot be in the past"
-        )
-    
-    if normalized_expires_at and normalized_expires_at < current_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="expires_at cannot be in the past"
-        )
-    
-    if normalized_deadline and normalized_expires_at:
-        if normalized_deadline > normalized_expires_at:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="application_deadline cannot be after expires_at"
-            )
+    validate_deadline_dates(normalized_deadline, normalized_expires_at, current_time)
     
     # Set published_at if status is published
-    published_at = None
-    if job_data.status == JobStatus.published:
-        published_at = current_time
+    published_at = current_time if job_data.status == JobStatus.published else None
     
     # Create job instance
     new_job = Job(
@@ -152,9 +120,8 @@ async def create_job(
 
 @router.put("/{job_id}", response_model=JobResponse)
 async def update_job(
-    job_id: str,
     job_data: JobUpdateRequest,
-    user: User = Depends(get_current_user),
+    job_user: tuple[Job, User] = Depends(require_job_ownership),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -166,62 +133,22 @@ async def update_job(
     - User must be the owner of the job
     
     Args:
-        job_id: Job UUID
         job_data: Job posting details to update
-        user: Current authenticated user (from dependency)
+        job_user: Tuple of (Job, User) from dependency (already validated)
         session: Database session
         
     Returns:
         JobResponse: Updated job posting
         
     Raises:
-        HTTPException: 403 if user doesn't meet requirements
-        HTTPException: 404 if job not found
         HTTPException: 400 if validation fails
     """
-    # Check user role
-    if user.role != UserRole.both:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only users with 'both' role (employer and employee) can update jobs."
-        )
+    job, _ = job_user
     
-    try:
-        job_uuid = uuid.UUID(job_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid job ID format"
-        )
-    
-    # Get job
-    stmt = select(Job).where(Job.id == job_uuid)
-    result = await session.execute(stmt)
-    job = result.scalar_one_or_none()
-    
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
-    
-    # Check if user owns the job
-    if job.employer_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to update this job"
-        )
-    
-    # Validate salary range if both are provided
+    # Validate salary range - use provided values or existing values
     salary_min = job_data.salary_min if job_data.salary_min is not None else job.salary_min
     salary_max = job_data.salary_max if job_data.salary_max is not None else job.salary_max
-    
-    if salary_min is not None and salary_max is not None:
-        if salary_min > salary_max:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="salary_min cannot be greater than salary_max"
-            )
+    validate_salary_range(salary_min, salary_max)
     
     # Validate deadline dates
     current_time = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -234,24 +161,7 @@ async def update_job(
     final_deadline = normalized_deadline if normalized_deadline is not None else job.application_deadline
     final_expires_at = normalized_expires_at if normalized_expires_at is not None else job.expires_at
     
-    if final_deadline and final_deadline < current_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="application_deadline cannot be in the past"
-        )
-    
-    if final_expires_at and final_expires_at < current_time:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="expires_at cannot be in the past"
-        )
-    
-    if final_deadline and final_expires_at:
-        if final_deadline > final_expires_at:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="application_deadline cannot be after expires_at"
-            )
+    validate_deadline_dates(final_deadline, final_expires_at, current_time)
     
     # Update job fields
     update_data = job_data.model_dump(exclude_unset=True)
@@ -283,9 +193,8 @@ async def update_job(
 
 @router.patch("/{job_id}/status", response_model=JobResponse)
 async def update_job_status(
-    job_id: str,
     status_data: JobStatusUpdateRequest,
-    user: User = Depends(get_current_user),
+    job_user: tuple[Job, User] = Depends(require_job_ownership),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -297,50 +206,14 @@ async def update_job_status(
     - User must be the owner of the job
     
     Args:
-        job_id: Job UUID
         status_data: New status (draft or published)
-        user: Current authenticated user (from dependency)
+        job_user: Tuple of (Job, User) from dependency (already validated)
         session: Database session
         
     Returns:
         JobResponse: Updated job posting
-        
-    Raises:
-        HTTPException: 403 if user doesn't meet requirements
-        HTTPException: 404 if job not found
     """
-    # Check user role
-    if user.role != UserRole.both:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only users with 'both' role (employer and employee) can update job status."
-        )
-    
-    try:
-        job_uuid = uuid.UUID(job_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid job ID format"
-        )
-    
-    # Get job
-    stmt = select(Job).where(Job.id == job_uuid)
-    result = await session.execute(stmt)
-    job = result.scalar_one_or_none()
-    
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
-    
-    # Check if user owns the job
-    if job.employer_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to update this job"
-        )
+    job, _ = job_user
     
     # Update status
     job.status = status_data.status
@@ -354,4 +227,62 @@ async def update_job_status(
     await session.refresh(job)
     
     return job_to_response(job)
+
+
+@router.delete("/{job_id}")
+async def delete_job(
+    job_user: tuple[Job, User] = Depends(require_job_ownership),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Delete a job posting and all its associated applications.
+    
+    Requirements:
+    - User must be authenticated
+    - User role must be "both" (employer and employee)
+    - User must be the owner of the job
+    
+    This will:
+    - Delete all job applications associated with this job
+    - Delete all resume files from Cloudinary for these applications
+    - Delete the job posting itself
+    
+    Args:
+        job_user: Tuple of (Job, User) from dependency (already validated)
+        session: Database session
+        
+    Returns:
+        dict: Success message
+        
+    Raises:
+        HTTPException: 403 if user doesn't own the job
+        HTTPException: 404 if job not found
+    """
+    job, _ = job_user
+    
+    # Get all applications for this job to delete resumes from Cloudinary
+    from database.schema import JobApplication
+    from utils.cloudinary_utils import delete_resume_from_cloudinary
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    applications_stmt = select(JobApplication).where(JobApplication.job_id == job.id)
+    applications_result = await session.execute(applications_stmt)
+    applications = applications_result.scalars().all()
+    
+    # Delete resumes from Cloudinary for all applications
+    for application in applications:
+        if application.resume_url:
+            try:
+                await delete_resume_from_cloudinary(application.resume_url)
+            except Exception as e:
+                # Log error but continue with deletion
+                logger.warning(f"Failed to delete resume from Cloudinary: {str(e)}")
+    
+    # Delete the job (cascade will delete applications automatically)
+    await session.delete(job)
+    await session.commit()
+    
+    return {"message": "Job deleted successfully"}
 

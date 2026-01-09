@@ -1,6 +1,7 @@
-import uuid
-import json
-import base64
+"""
+Payment callback routes for handling eSewa payment gateway responses.
+"""
+import asyncio
 import logging
 from fastapi import APIRouter, Query, HTTPException, Depends, status
 from fastapi.responses import RedirectResponse
@@ -15,12 +16,18 @@ from utils.payment_utils import (
     verify_payment_status,
     process_payment_success
 )
+from .payment_utils import (
+    parse_payment_data,
+    extract_user_uuid,
+    validate_plan,
+    build_frontend_redirect_url
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/payment",
-    tags=["Payment Callback"]
+    tags=["Payment"]
 )
 
 
@@ -50,86 +57,67 @@ async def payment_callback(
     
     try:
         # 1. Parse payment response
-        ref_id = None
-        total_amount = None
-        
-        if data:
-            # Decode base64 response (preferred method)
-            try:
-                decoded_bytes = base64.b64decode(data)
-                decoded_json = json.loads(decoded_bytes.decode('utf-8'))
-                transaction_uuid = decoded_json.get('transaction_uuid') or transaction_uuid
-                total_amount = decoded_json.get('total_amount')
-                ref_id = decoded_json.get('ref_id')
-            except Exception as e:
-                logger.error(f"Error decoding base64 response: {str(e)}")
-                return RedirectResponse(
-                    url=f"{settings.FRONTEND_URL}/?payment=failed&error=invalid_response"
-                )
+        try:
+            parsed_transaction_uuid, total_amount, ref_id = parse_payment_data(
+                data, transaction_uuid, user_id
+            )
+            transaction_uuid = parsed_transaction_uuid
+        except ValueError as e:
+            logger.error(f"Error parsing payment data: {str(e)}")
+            return RedirectResponse(
+                url=build_frontend_redirect_url("failed", error="invalid_response")
+            )
         
         # Validate transaction_uuid exists
         if not transaction_uuid:
             logger.error("Missing transaction_uuid in callback")
             return RedirectResponse(
-                url=f"{settings.FRONTEND_URL}/?payment=failed&error=missing_transaction"
+                url=build_frontend_redirect_url("failed", error="missing_transaction")
             )
         
-        # 2. Extract user_id from transaction_uuid (format: user_id_uuid)
+        # 2. Extract user UUID
         try:
-            user_uuid_str = transaction_uuid.split('_')[0]
-            user_uuid = uuid.UUID(user_uuid_str)
-        except (IndexError, ValueError):
-            # Fallback to user_id from query parameter
-            if not user_id:
-                logger.error("Cannot extract user_id from transaction_uuid and no user_id in query")
-                return RedirectResponse(
-                    url=f"{settings.FRONTEND_URL}/?payment=failed&error=user_not_found"
-                )
-            try:
-                user_uuid = uuid.UUID(user_id)
-            except ValueError:
-                logger.error(f"Invalid user_id format: {user_id}")
-                return RedirectResponse(
-                    url=f"{settings.FRONTEND_URL}/?payment=failed&error=invalid_user"
-                )
+            user_uuid = extract_user_uuid(transaction_uuid, user_id)
+        except ValueError as e:
+            logger.error(f"Error extracting user UUID: {str(e)}")
+            return RedirectResponse(
+                url=build_frontend_redirect_url("failed", error="user_not_found")
+            )
         
         # 3. Validate plan parameter
-        if not plan:
-            logger.error("Plan not specified in callback")
-            return RedirectResponse(
-                url=f"{settings.FRONTEND_URL}/?payment=failed&error=plan_not_found"
-            )
-        
         try:
-            plan_enum = UserPlan(plan)
-        except ValueError:
-            logger.error(f"Invalid plan name: {plan}")
+            plan_enum = validate_plan(plan)
+        except ValueError as e:
+            logger.error(f"Error validating plan: {str(e)}")
             return RedirectResponse(
-                url=f"{settings.FRONTEND_URL}/?payment=failed&error=invalid_plan"
+                url=build_frontend_redirect_url("failed", error="invalid_plan")
             )
         
-        # 4. Fetch user and plan from database
+        # 4. Fetch user and plan from database (parallel queries)
         stmt_user = select(User).where(User.id == user_uuid)
         stmt_plan = select(Plan).where(
             Plan.plan_name == plan_enum,
             Plan.is_active == True
         )
         
-        result_user = await session.execute(stmt_user)
-        result_plan = await session.execute(stmt_plan)
+        # Execute queries in parallel (they're independent)
+        result_user, result_plan = await asyncio.gather(
+            session.execute(stmt_user),
+            session.execute(stmt_plan)
+        )
         user = result_user.scalar_one_or_none()
         purchased_plan = result_plan.scalar_one_or_none()
         
         if not user:
             logger.error(f"User not found: {user_uuid}")
             return RedirectResponse(
-                url=f"{settings.FRONTEND_URL}/?payment=failed&error=user_not_found"
+                url=build_frontend_redirect_url("failed", error="user_not_found")
             )
         
         if not purchased_plan:
             logger.error(f"Plan not found: {plan_enum}")
             return RedirectResponse(
-                url=f"{settings.FRONTEND_URL}/?payment=failed&error=plan_not_found"
+                url=build_frontend_redirect_url("failed", error="plan_not_found")
             )
         
         # 5. Verify payment status with eSewa Status Check API
@@ -159,19 +147,22 @@ async def payment_callback(
                 logger.info(f"Payment processed: subscription {new_subscription.id} for user {user_uuid}")
                 
                 # Redirect to success page
-                success_url = f"{settings.FRONTEND_URL}/?payment=success&refId={verified_ref_id or 'N/A'}"
+                success_url = build_frontend_redirect_url(
+                    "success",
+                    ref_id=verified_ref_id or 'N/A'
+                )
                 return RedirectResponse(url=success_url, status_code=302)
                 
             except Exception as db_error:
                 logger.error(f"Database error processing payment: {str(db_error)}")
                 return RedirectResponse(
-                    url=f"{settings.FRONTEND_URL}/?payment=failed&error=database_error"
+                    url=build_frontend_redirect_url("failed", error="database_error")
                 )
         
         else:
             # Payment not completed
             logger.warning(f"Payment status not COMPLETE: {payment_status}")
-            failure_url = f"{settings.FRONTEND_URL}/?payment=failed&status={payment_status}"
+            failure_url = build_frontend_redirect_url("failed", error=payment_status)
             return RedirectResponse(url=failure_url, status_code=302)
     
     except HTTPException:
@@ -181,22 +172,31 @@ async def payment_callback(
         import traceback
         traceback.print_exc()
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/?payment=failed&error=processing_error"
+            url=build_frontend_redirect_url("failed", error="processing_error")
         )
 
 
 @router.get("/failure")
 async def payment_failure(
-    transaction_uuid: Optional[str] = Query(None),
-    user_id: Optional[str] = Query(None),
+    transaction_uuid: Optional[str] = Query(None, description="Transaction UUID"),
+    user_id: Optional[str] = Query(None, description="User ID"),
     session: AsyncSession = Depends(get_session)
 ):
     """
     Handle eSewa payment failure callback.
     
     This is called when user cancels payment or payment fails.
-    """
-    logger.info(f"Payment failure callback - Transaction UUID: {transaction_uuid}")
+    Logs the failure and redirects to frontend with failure status.
     
-    failure_url = f"{settings.FRONTEND_URL}/?payment=failed&reason=user_cancelled"
+    Args:
+        transaction_uuid: Transaction UUID (optional)
+        user_id: User ID (optional)
+        session: Database session
+        
+    Returns:
+        RedirectResponse: Redirects to frontend with failure status
+    """
+    logger.info(f"Payment failure callback - Transaction UUID: {transaction_uuid}, User ID: {user_id}")
+    
+    failure_url = build_frontend_redirect_url("failed", reason="user_cancelled")
     return RedirectResponse(url=failure_url, status_code=302)

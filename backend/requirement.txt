@@ -11,3 +11,4 @@ sqlmodel
 itsdangerous
 requests
 xmltodict
+cloudinary

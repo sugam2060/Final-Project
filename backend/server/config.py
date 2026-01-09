@@ -105,6 +105,84 @@ class Settings:
         # Production: "https://esewa.com.np/api/epay/transaction/status/"
     )
 
+    # -----------------------------
+    # Cloudinary Configuration
+    # -----------------------------
+    # Cloudinary is used for storing resume PDF files uploaded by job applicants.
+    # Get your credentials from: https://cloudinary.com/console
+    # Required for job application functionality.
+    CLOUDINARY_CLOUD_NAME: str = config(
+        "CLOUDINARY_CLOUD_NAME",
+        cast=str,
+        default="",
+    )
+    CLOUDINARY_API_KEY: str = config(
+        "CLOUDINARY_API_KEY",
+        cast=str,
+        default="",
+    )
+    CLOUDINARY_API_SECRET: Secret = config(
+        "CLOUDINARY_API_SECRET",
+        cast=Secret,
+        default="",
+    )
+
+    # -----------------------------
+    # SMTP Email Configuration
+    # -----------------------------
+    # SMTP settings for sending email notifications.
+    # Required for sending application acceptance emails.
+    # Example providers: Gmail, SendGrid, AWS SES, etc.
+    SMTP_HOST: str = config(
+        "SMTP_HOST",
+        cast=str,
+        default="",
+    )
+    SMTP_PORT: int = config(
+        "SMTP_PORT",
+        cast=int,
+        default=587,  # Default TLS port (587 for TLS, 465 for SSL)
+    )
+    SMTP_USER: str = config(
+        "SMTP_USER",
+        cast=str,
+        default="",
+    )
+    SMTP_PASSWORD: Secret = config(
+        "SMTP_PASSWORD",
+        cast=Secret,
+        default="",
+    )
+    SMTP_FROM_EMAIL: str = config(
+        "SMTP_FROM_EMAIL",
+        cast=str,
+        default="",
+    )
+    SMTP_FROM_NAME: str = config(
+        "SMTP_FROM_NAME",
+        cast=str,
+        default="JobPortal",  # Display name for sender
+    )
+    SMTP_REPLY_TO: str = config(
+        "SMTP_REPLY_TO",
+        cast=str,
+        default="",  # Reply-to email address (optional)
+    )
+    SMTP_USE_TLS: bool = config(
+        "SMTP_USE_TLS",
+        cast=bool,
+        default=True,  # Use TLS by default (set False for SSL on port 465)
+    )
+    SMTP_TIMEOUT: int = config(
+        "SMTP_TIMEOUT",
+        cast=int,
+        default=30,  # SMTP connection timeout in seconds
+    )
+    EMAIL_ENABLED: bool = config(
+        "EMAIL_ENABLED",
+        cast=bool,
+        default=True,  # Enable/disable email sending globally
+    )
 
 
 # Singleton-style access

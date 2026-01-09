@@ -19,7 +19,7 @@ ssl_context.verify_mode = ssl.CERT_REQUIRED
 # -----------------------------
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL.replace("?sslmode=require", ""),
-    echo=True,
+    echo=False,
 
     connect_args={
         "ssl": ssl_context,

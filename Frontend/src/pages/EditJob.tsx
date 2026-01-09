@@ -1,15 +1,25 @@
+import { memo, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getJob, updateJob, type JobUpdateRequest } from "@/api/job";
 import { CreateJobForm, DraftPublishActions } from "@/components/create_job";
-import type { JobFormValues } from "@/components/create_job";
+import type { JobFormValues, CreateJobFormInstance } from "@/components/create_job";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { useMemo, useRef } from "react";
-import type { CreateJobFormInstance } from "@/components/create_job";
 
-export default function EditJob() {
+/**
+ * EditJob Page Component
+ * 
+ * Allows editing of existing job postings.
+ * 
+ * Features:
+ * - Job data loading
+ * - Form pre-population
+ * - Draft and publish actions
+ * - Error handling
+ */
+function EditJob() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -167,9 +177,9 @@ export default function EditJob() {
     updateMutation.mutate(jobData);
   }
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     navigate("/jobs");
-  };
+  }, [navigate]);
 
   if (isLoading) {
     return (
@@ -186,14 +196,14 @@ export default function EditJob() {
   }
 
   if (isError) {
+    const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
+    
     return (
-      <div className="max-w-4xl mx-auto py-10 px-4">
+      <div className="max-w-4xl mx-auto py-10 px-4" role="alert" aria-live="assertive">
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold mb-2">Error Loading Job</h2>
-          <p className="text-muted-foreground mb-4">
-            {error instanceof Error ? error.message : "An unexpected error occurred"}
-          </p>
-          <Button onClick={handleCancel}>Back to Jobs</Button>
+          <p className="text-muted-foreground mb-4">{errorMessage}</p>
+          <Button onClick={handleCancel} aria-label="Back to jobs">Back to Jobs</Button>
         </div>
       </div>
     );
@@ -235,4 +245,6 @@ export default function EditJob() {
     </div>
   );
 }
+
+export default memo(EditJob);
 

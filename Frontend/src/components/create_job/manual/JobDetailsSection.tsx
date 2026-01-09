@@ -1,3 +1,4 @@
+import { memo, useCallback } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,12 +17,22 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import type { JobFormValues } from "./jobFormSchema"
+import { EMPLOYMENT_TYPE_OPTIONS, EXPERIENCE_LEVEL_OPTIONS } from "./constants"
 
 interface JobDetailsSectionProps {
   form: UseFormReturn<JobFormValues>
 }
 
-export function JobDetailsSection({ form }: JobDetailsSectionProps) {
+/**
+ * JobDetailsSection Component
+ * 
+ * Form section for job details (employment type, experience level, compensation, deadlines).
+ */
+export const JobDetailsSection = memo(function JobDetailsSection({ form }: JobDetailsSectionProps) {
+  // Memoize number input handler to prevent unnecessary re-renders
+  const handleNumberChange = useCallback((value: string, onChange: (val: string | undefined) => void) => {
+    onChange(value === "" ? undefined : value)
+  }, [])
   return (
     <section className="space-y-6">
       <h2 className="text-lg font-bold">Job Details</h2>
@@ -35,7 +46,7 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
               <FormLabel>Employment Type</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                defaultValue={field.value}
+                value={field.value}
               >
                 <FormControl>
                   <SelectTrigger>
@@ -43,11 +54,11 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="full-time">Full-time</SelectItem>
-                  <SelectItem value="part-time">Part-time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="freelance">Freelance</SelectItem>
-                  <SelectItem value="internship">Internship</SelectItem>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -63,7 +74,7 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
               <FormLabel>Experience Level</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                defaultValue={field.value}
+                value={field.value}
               >
                 <FormControl>
                   <SelectTrigger>
@@ -71,10 +82,11 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="entry">Entry Level</SelectItem>
-                  <SelectItem value="mid">Mid Level</SelectItem>
-                  <SelectItem value="senior">Senior Level</SelectItem>
-                  <SelectItem value="executive">Executive</SelectItem>
+                  {EXPERIENCE_LEVEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -111,11 +123,10 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
                   <Input
                     type="number"
                     placeholder="50000"
+                    min="0"
+                    step="1"
                     value={field.value ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      field.onChange(value === "" ? undefined : value)
-                    }}
+                    onChange={(e) => handleNumberChange(e.target.value, field.onChange)}
                     onBlur={field.onBlur}
                   />
                 </FormControl>
@@ -134,11 +145,10 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
                   <Input
                     type="number"
                     placeholder="80000"
+                    min="0"
+                    step="1"
                     value={field.value ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      field.onChange(value === "" ? undefined : value)
-                    }}
+                    onChange={(e) => handleNumberChange(e.target.value, field.onChange)}
                     onBlur={field.onBlur}
                   />
                 </FormControl>
@@ -199,8 +209,9 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
             <FormItem className="flex flex-row items-start space-x-3 space-y-0">
               <FormControl>
                 <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
+                  checked={field.value || false}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  onBlur={field.onBlur}
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
@@ -212,5 +223,5 @@ export function JobDetailsSection({ form }: JobDetailsSectionProps) {
       </div>
     </section>
   )
-}
+})
 

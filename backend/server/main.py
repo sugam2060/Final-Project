@@ -11,6 +11,8 @@ from routes.payment.payment_initialize import router as payment_router
 from routes.payment.payment_callback import router as payment_callback_router
 from routes.job.job_get import router as job_get_router
 from routes.job.job_post import router as job_post_router
+from routes.job.job_application import router as job_application_router
+from routes.job.job_application_actions import router as job_application_actions_router
 
 
 from config import settings
@@ -84,6 +86,8 @@ app.include_router(payment_router)
 app.include_router(payment_callback_router)
 app.include_router(job_get_router)
 app.include_router(job_post_router)
+app.include_router(job_application_router)
+app.include_router(job_application_actions_router)
 
 
 # -----------------------------

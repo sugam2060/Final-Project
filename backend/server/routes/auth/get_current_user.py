@@ -1,3 +1,6 @@
+"""
+FastAPI dependency for retrieving the current authenticated user.
+"""
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -31,11 +34,18 @@ async def get_current_user(
         User: The authenticated user object
         
     Raises:
-        HTTPException: If user is not authenticated, not found, or inactive
+        HTTPException: 401 if user is not authenticated or not found
+        HTTPException: 403 if user account is inactive
     """
     # Extract and decode token from cookies
-    token = get_access_token_from_cookie(request)
-    user_id = decode_token(token)
+    try:
+        token = get_access_token_from_cookie(request)
+        user_id = decode_token(token)
+    except (ValueError, KeyError, AttributeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing authentication token"
+        )
 
     # Fetch user from database
     stmt = select(User).where(User.id == user_id)
@@ -45,13 +55,13 @@ async def get_current_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="User not found"
         )
     
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive",
+            detail="User account is inactive"
         )
 
     return user

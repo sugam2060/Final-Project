@@ -1,3 +1,6 @@
+"""
+Payment utility functions for eSewa payment gateway integration.
+"""
 import hmac
 import hashlib
 import base64
@@ -17,7 +20,12 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-def generate_esewa_signature(secret_key: str, total_amount: str, transaction_uuid: str, product_code: str):
+def generate_esewa_signature(
+    secret_key: str,
+    total_amount: str,
+    transaction_uuid: str,
+    product_code: str
+) -> str:
     """
     Generate HMAC SHA256 signature for eSewa payment (v2 API).
     
@@ -29,7 +37,14 @@ def generate_esewa_signature(secret_key: str, total_amount: str, transaction_uui
     
     Returns:
         str: Base64 encoded signature
+        
+    Raises:
+        ValueError: If any required parameter is empty
     """
+    # Validate inputs
+    if not all([secret_key, total_amount, transaction_uuid, product_code]):
+        raise ValueError("All signature parameters are required")
+    
     # eSewa v2 requires fields in this specific order for signing
     data = f"total_amount={total_amount},transaction_uuid={transaction_uuid},product_code={product_code}"
     
@@ -64,10 +79,17 @@ async def verify_payment_status(
         dict: Status check response from eSewa API
     
     Raises:
-        HTTPException: If verification fails
+        HTTPException: 503 if service unavailable, 500 if verification fails
     """
     if product_code is None:
         product_code = settings.ESEWA_PRODUCT_CODE
+    
+    # Validate inputs
+    if not transaction_uuid or not total_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Transaction UUID and total amount are required"
+        )
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -80,11 +102,23 @@ async def verify_payment_status(
             response.raise_for_status()
             verification_data = response.json()
             
-            logger.info(f"Payment status check response: {verification_data}")
+            logger.info(f"Payment status check response for {transaction_uuid}: {verification_data.get('status', 'unknown')}")
             return verification_data
             
+    except httpx.TimeoutException:
+        logger.error(f"Timeout calling eSewa status check API for transaction {transaction_uuid}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment verification service timeout"
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error calling eSewa status check API: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment verification service returned an error"
+        )
     except httpx.HTTPError as e:
-        logger.error(f"Error calling eSewa status check API: {str(e)}")
+        logger.error(f"HTTP error calling eSewa status check API: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Payment verification service unavailable"
@@ -105,13 +139,14 @@ async def update_user_role(
     Update user role to 'both' if not already set.
     
     Optimized: Only updates if role is not already 'both', avoiding unnecessary updates.
+    Removed redundant database query - if update affects 0 rows, we assume user already has 'both' role.
     
     Args:
         session: Database session
         user_uuid: User UUID to update
-    
+        
     Returns:
-        bool: True if role was updated, False if already 'both' or user not found
+        bool: True if role was updated, False if already 'both'
     """
     # Update only if role is not 'both' - more efficient than fetch then update
     update_stmt = (
@@ -129,20 +164,10 @@ async def update_user_role(
         logger.info(f"Updated user {user_uuid} role to 'both'")
         return True
     else:
-        # Check if user exists (might be already 'both' or user doesn't exist)
-        stmt_check = select(User.role).where(User.id == user_uuid)
-        result_check = await session.execute(stmt_check)
-        role = result_check.scalar_one_or_none()
-        
-        if role is None:
-            logger.error(f"User not found: {user_uuid}")
-            return False
-        elif role == UserRole.both:
-            logger.debug(f"User {user_uuid} already has role 'both'")
-            return False
-        else:
-            logger.warning(f"Unexpected: User {user_uuid} role update had no effect")
-            return False
+        # If no rows affected, user either doesn't exist or already has 'both' role
+        # We skip the redundant check query for better performance
+        logger.debug(f"User {user_uuid} role not updated (likely already 'both' or user not found)")
+        return False
 
 
 async def deactivate_existing_subscriptions(

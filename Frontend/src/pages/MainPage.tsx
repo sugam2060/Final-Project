@@ -1,13 +1,21 @@
-import Hero from '@/components/main/HeroSection'
-import PopularJobs from '@/components/main/PopularJobs'
+import { memo } from "react";
+import Hero from "@/components/main/HeroSection";
+import PopularJobs from "@/components/main/PopularJobs";
 
-const Main = () => {
+/**
+ * MainPage Component
+ * 
+ * Landing page with hero section and popular job categories.
+ */
+const MainPage = memo(function MainPage() {
   return (
     <>
       <Hero />
       <PopularJobs />
     </>
-  )
-}
+  );
+});
 
-export default Main
+MainPage.displayName = "MainPage";
+
+export default MainPage;

@@ -1,3 +1,4 @@
+import { memo, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getPublicJob } from "@/api/job";
@@ -6,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import ReactMarkdown from "react-markdown";
 
+/**
+ * Format date string to readable format
+ */
 function formatDate(dateString: string | null): string {
   if (!dateString) return "N/A";
   try {
@@ -15,7 +19,18 @@ function formatDate(dateString: string | null): string {
   }
 }
 
-export default function JobDetail() {
+/**
+ * JobDetail Page Component
+ * 
+ * Displays detailed information about a single job posting.
+ * 
+ * Features:
+ * - Job details display
+ * - Markdown description rendering
+ * - Navigation controls
+ * - Error handling
+ */
+function JobDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
@@ -30,6 +45,48 @@ export default function JobDetail() {
     enabled: !!id,
   });
 
+  const handleBack = useCallback(() => {
+    navigate("/jobs/browse");
+  }, [navigate]);
+
+  const handleReload = useCallback(() => {
+    window.location.reload();
+  }, []);
+
+  // Memoize markdown components to prevent re-creation
+  const markdownComponents = useMemo(
+    () => ({
+      h1: ({ node, ...props }: any) => (
+        <h1 className="text-3xl font-bold mt-6 mb-4 text-foreground" {...props} />
+      ),
+      h2: ({ node, ...props }: any) => (
+        <h2 className="text-2xl font-bold mt-6 mb-4 text-foreground" {...props} />
+      ),
+      h3: ({ node, ...props }: any) => (
+        <h3 className="text-xl font-bold mt-5 mb-3 text-foreground" {...props} />
+      ),
+      h4: ({ node, ...props }: any) => (
+        <h4 className="text-lg font-bold mt-4 mb-2 text-foreground" {...props} />
+      ),
+      p: ({ node, ...props }: any) => (
+        <p className="text-muted-foreground mb-4 leading-relaxed" {...props} />
+      ),
+      strong: ({ node, ...props }: any) => (
+        <strong className="font-bold text-foreground" {...props} />
+      ),
+      ul: ({ node, ...props }: any) => (
+        <ul className="list-disc pl-6 space-y-2 my-4" {...props} />
+      ),
+      ol: ({ node, ...props }: any) => (
+        <ol className="list-decimal pl-6 space-y-2 my-4" {...props} />
+      ),
+      li: ({ node, ...props }: any) => (
+        <li className="text-muted-foreground" {...props} />
+      ),
+    }),
+    []
+  );
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto py-10 px-4">
@@ -41,15 +98,15 @@ export default function JobDetail() {
   }
 
   if (isError) {
+    const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
+    
     return (
-      <div className="max-w-4xl mx-auto py-10 px-4 text-center">
+      <div className="max-w-4xl mx-auto py-10 px-4 text-center" role="alert" aria-live="assertive">
         <h1 className="text-3xl font-black mb-4">Error Loading Job</h1>
-        <p className="text-muted-foreground mb-4">
-          {error instanceof Error ? error.message : "An unexpected error occurred"}
-        </p>
+        <p className="text-muted-foreground mb-4">{errorMessage}</p>
         <div className="flex gap-4 justify-center">
-          <Button onClick={() => navigate("/jobs/browse")}>Browse Jobs</Button>
-          <Button variant="outline" onClick={() => window.location.reload()}>
+          <Button onClick={handleBack} aria-label="Browse jobs">Browse Jobs</Button>
+          <Button variant="outline" onClick={handleReload} aria-label="Reload page">
             Try Again
           </Button>
         </div>
@@ -70,11 +127,13 @@ export default function JobDetail() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4">
+    <article className="max-w-4xl mx-auto py-10 px-4" aria-label="Job details">
       <Button
+        type="button"
         variant="ghost"
-        onClick={() => navigate("/jobs/browse")}
+        onClick={handleBack}
         className="mb-6"
+        aria-label="Back to jobs listing"
       >
         ← Back to Jobs
       </Button>
@@ -149,39 +208,9 @@ export default function JobDetail() {
         </div>
 
         {/* Description */}
-        <div className="mb-8">
+        <div className="mb-8">  
           <div className="prose dark:prose-invert max-w-none">
-            <ReactMarkdown
-              components={{
-                h1: ({ node, ...props }) => (
-                  <h1 className="text-3xl font-bold mt-6 mb-4 text-foreground" {...props} />
-                ),
-                h2: ({ node, ...props }) => (
-                  <h2 className="text-2xl font-bold mt-6 mb-4 text-foreground" {...props} />
-                ),
-                h3: ({ node, ...props }) => (
-                  <h3 className="text-xl font-bold mt-5 mb-3 text-foreground" {...props} />
-                ),
-                h4: ({ node, ...props }) => (
-                  <h4 className="text-lg font-bold mt-4 mb-2 text-foreground" {...props} />
-                ),
-                p: ({ node, ...props }) => (
-                  <p className="text-muted-foreground mb-4 leading-relaxed" {...props} />
-                ),
-                strong: ({ node, ...props }) => (
-                  <strong className="font-bold text-foreground" {...props} />
-                ),
-                ul: ({ node, ...props }) => (
-                  <ul className="list-disc pl-6 space-y-2 my-4" {...props} />
-                ),
-                ol: ({ node, ...props }) => (
-                  <ol className="list-decimal pl-6 space-y-2 my-4" {...props} />
-                ),
-                li: ({ node, ...props }) => (
-                  <li className="text-muted-foreground" {...props} />
-                ),
-              }}
-            >
+            <ReactMarkdown components={markdownComponents}>
               {job.description}
             </ReactMarkdown>
           </div>
@@ -189,12 +218,20 @@ export default function JobDetail() {
 
         {/* Apply Button */}
         <div className="border-t pt-6">
-          <Button size="lg" className="w-full md:w-auto">
+          <Button 
+            type="button"
+            size="lg" 
+            className="w-full md:w-auto"
+            onClick={() => navigate(`/jobs/view/${job.id}/apply`)}
+            aria-label={`Apply for ${job.title} at ${job.company_name}`}
+          >
             Apply for this Job
           </Button>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
+
+export default memo(JobDetail);
 

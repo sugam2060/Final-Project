@@ -1,14 +1,21 @@
+"""
+Payment initialization routes for eSewa payment gateway integration.
+"""
+"""
+Payment initialization routes for eSewa payment gateway integration.
+"""
 import uuid
 from fastapi import APIRouter, HTTPException, Depends, status
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from routes.auth.get_current_user import get_current_user
 from utils.payment_utils import generate_esewa_signature
-from database.schema import User, Plan, UserPlan
+from database.schema import User, Plan
 from database.db import get_session
 from config import settings
+from .payment_utils import build_callback_urls
+from pydantics.payment_types import PaymentInitRequest, PaymentInitResponse
 
 router = APIRouter(
     prefix="/api/payment",
@@ -16,11 +23,10 @@ router = APIRouter(
 )
 
 
-class PaymentInitRequest(BaseModel):
-    plan: UserPlan  # Plan name (standard or premium)
-
-
-@router.post("/initiate")
+# -----------------------------
+# Endpoints
+# -----------------------------
+@router.post("/initiate", response_model=PaymentInitResponse)
 async def initiate_payment(
     payload: PaymentInitRequest,
     user: User = Depends(get_current_user),
@@ -29,7 +35,23 @@ async def initiate_payment(
     """
     Initiate eSewa payment for a subscription plan.
     
-    Fetches plan details from database and prepares payment form data.
+    This endpoint:
+    1. Validates the requested plan exists and is active
+    2. Generates a unique transaction UUID
+    3. Creates payment signature for eSewa
+    4. Builds callback URLs for success/failure
+    5. Returns payment form data for frontend submission
+    
+    Args:
+        payload: Payment initiation request with plan name
+        user: Current authenticated user
+        session: Database session
+        
+    Returns:
+        PaymentInitResponse: Payment form data including URL and parameters
+        
+    Raises:
+        HTTPException: 404 if plan not found or inactive
     """
     # Fetch plan from database
     stmt = select(Plan).where(
@@ -57,15 +79,17 @@ async def initiate_payment(
         settings.ESEWA_PRODUCT_CODE
     )
     
-    # Build callback URLs
-    callback_params = f"transaction_uuid={transaction_uuid}&plan={payload.plan.value}&user_id={user.id}"
-    success_url = f"{settings.BACKEND_URL}/api/payment/callback?{callback_params}"
-    failure_url = f"{settings.BACKEND_URL}/api/payment/failure?{callback_params}"
+    # Build callback URLs using utility
+    success_url, failure_url = build_callback_urls(
+        transaction_uuid=transaction_uuid,
+        plan=payload.plan.value,
+        user_id=user.id
+    )
 
     # Return payment form data
-    return {
-        "url": settings.ESEWA_INITIATE_URL,
-        "parameters": {
+    return PaymentInitResponse(
+        url=settings.ESEWA_INITIATE_URL,
+        parameters={
             "amount": total_amount,
             "tax_amount": "0",
             "total_amount": total_amount,
@@ -78,4 +102,4 @@ async def initiate_payment(
             "signed_field_names": "total_amount,transaction_uuid,product_code",
             "signature": signature
         }
-    }
+    )

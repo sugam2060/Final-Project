@@ -1,4 +1,4 @@
-import React from "react";
+import { memo, useEffect } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { useVerifySession } from "@/Hook/useGetUser";
 import { useNavigate } from "react-router-dom";
@@ -7,16 +7,38 @@ interface ProtectedProps {
   children: React.ReactNode;
 }
 
-const Protected: React.FC<ProtectedProps> = ({ children }) => {
+/**
+ * Protected Component
+ * 
+ * Route protection wrapper that requires authentication.
+ * 
+ * Features:
+ * - Session verification
+ * - Loading state
+ * - Automatic redirect on auth failure
+ */
+const Protected = memo(function Protected({ children }: ProtectedProps) {
   const { isLoggedIn, isLoading } = useVerifySession();
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  // 1. Loading state
+  // Redirect on auth failure
+  useEffect(() => {
+    if (!isLoading && !isLoggedIn) {
+      navigate("/");
+    }
+  }, [isLoading, isLoggedIn, navigate]);
+
+  // Loading state
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-background"
+        role="status"
+        aria-live="polite"
+        aria-label="Verifying session"
+      >
         <div className="flex items-center gap-3">
-          <Spinner className="h-5 w-5" />
+          <Spinner className="h-5 w-5" aria-hidden="true" />
           <span className="text-sm font-medium text-muted-foreground">
             Verifying session…
           </span>
@@ -25,13 +47,15 @@ const Protected: React.FC<ProtectedProps> = ({ children }) => {
     );
   }
 
-  // 2. Auth failed (redirect handled in hook)
+  // Auth failed - redirect will happen via useEffect
   if (!isLoggedIn) {
-    navigate("/")
+    return null;
   }
 
-  // 3. Auth success
+  // Auth success
   return <>{children}</>;
-};
+});
+
+Protected.displayName = "Protected";
 
 export default Protected;

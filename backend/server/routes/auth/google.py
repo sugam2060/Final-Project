@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from authlib.integrations.starlette_client import OAuth
-import uuid
+from typing import Optional
 
 from config import settings
 from database.db import get_session
@@ -45,14 +45,36 @@ async def google_callback(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
+    """
+    Handle Google OAuth callback.
+    
+    This endpoint:
+    1. Validates the OAuth token from Google
+    2. Finds or creates the user account
+    3. Links or creates OAuth identity
+    4. Issues a JWT access token
+    5. Sets an HTTP-only cookie and redirects
+    
+    Returns:
+        RedirectResponse: Redirects to frontend with authentication cookie set
+        
+    Raises:
+        HTTPException: 400 if OAuth authentication fails
+    """
     try:
         token = await oauth.google.authorize_access_token(request)
         userinfo = token.get("userinfo")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Google authentication failed")
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google authentication failed: {str(e)}"
+        )
 
     if not userinfo:
-        raise HTTPException(status_code=400, detail="Failed to fetch user info")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to fetch user info"
+        )
 
     google_sub = userinfo["sub"]
     email = userinfo.get("email")
@@ -61,28 +83,45 @@ async def google_callback(
     email_verified = userinfo.get("email_verified", False)
 
     # -----------------------------
-    # 1. Find OAuth Identity
+    # 1. Find OAuth Identity (with user joined to reduce queries)
     # -----------------------------
-    stmt = select(OAuthIdentity).where(
-        OAuthIdentity.provider == "google",
-        OAuthIdentity.provider_user_id == google_sub,
+    stmt = (
+        select(OAuthIdentity, User)
+        .join(User, OAuthIdentity.user_id == User.id)
+        .where(
+            OAuthIdentity.provider == "google",
+            OAuthIdentity.provider_user_id == google_sub,
+        )
     )
     result = await session.execute(stmt)
-    identity = result.scalar_one_or_none()
-
-    # -----------------------------
-    # 2. Resolve User
-    # -----------------------------
-    if identity:
-        stmt = select(User).where(User.id == identity.user_id)
-        result = await session.execute(stmt)
-        user = result.scalar_one()
+    identity_row = result.first()
+    
+    if identity_row:
+        identity, user = identity_row
+        # Update user info if it has changed
+        if user.email != email or user.name != name or user.avatar_url != avatar_url or user.email_verified != email_verified:
+            user.email = email
+            user.name = name
+            user.avatar_url = avatar_url
+            user.email_verified = email_verified
+            session.add(user)
+        
+        # Update identity info if it has changed
+        if identity.email != email or identity.name != name or identity.avatar_url != avatar_url:
+            identity.email = email
+            identity.name = name
+            identity.avatar_url = avatar_url
+            session.add(identity)
     else:
+        # -----------------------------
+        # 2. Resolve User by email (if OAuth identity doesn't exist)
+        # -----------------------------
         stmt = select(User).where(User.email == email)
         result = await session.execute(stmt)
-        user = result.scalar_one_or_none()
+        user: Optional[User] = result.scalar_one_or_none()
 
         if not user:
+            # Create new user
             user = User(
                 email=email,
                 email_verified=email_verified,
@@ -92,6 +131,7 @@ async def google_callback(
             session.add(user)
             await session.flush()  # ensures user.id exists
 
+        # Create OAuth identity
         identity = OAuthIdentity(
             user_id=user.id,
             provider="google",

@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { PricingCardStandard } from "@/components/pricing/StandardPricing";
 import { PricingCardPremium } from "@/components/pricing/PremiumPricing";
 import { FAQItem } from "@/components/pricing/PricingFAQ";
@@ -5,11 +6,31 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchPlans, type PlansListResponse } from "@/api/plan";
 import { toast } from "sonner";
 
-export default function PricingPage() {
+/**
+ * PricingPage Component
+ * 
+ * Displays pricing plans and FAQ section.
+ * 
+ * Features:
+ * - Plan cards display
+ * - FAQ section
+ * - Error handling
+ */
+function PricingPage() {
   const { data, isError, error } = useQuery<PlansListResponse>({
     queryKey: ["plans"],
     queryFn: fetchPlans,
   });
+
+  const standardPlan = useMemo(
+    () => data?.plans.find((p) => p.plan_name === "standard"),
+    [data?.plans]
+  );
+
+  const premiumPlan = useMemo(
+    () => data?.plans.find((p) => p.plan_name === "premium"),
+    [data?.plans]
+  );
 
   if (isError) {
     toast.error((error as Error).message || "Failed to load plans");
@@ -36,12 +57,8 @@ export default function PricingPage() {
 
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          <PricingCardStandard
-            plan={data?.plans.find((p) => p.plan_name === "standard")}
-          />
-          <PricingCardPremium
-            plan={data?.plans.find((p) => p.plan_name === "premium")}
-          />
+          <PricingCardStandard plan={standardPlan} />
+          <PricingCardPremium plan={premiumPlan} />
         </div>
 
         {/* FAQ */}
@@ -62,3 +79,5 @@ export default function PricingPage() {
     </main>
   );
 }
+
+export default memo(PricingPage);

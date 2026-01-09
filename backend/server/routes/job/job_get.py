@@ -1,20 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, func
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime, timezone
 import uuid
 
-from routes.auth.get_current_user import get_current_user
 from database.db import get_session
 from database.schema import (
     User,
     Job,
-    UserRole,
     JobStatus,
 )
-from .job_models import JobResponse, JobsListResponse
-from .job_utils import job_to_response
+from pydantics.job_types import JobResponse, JobsListResponse
+from .job_utils import job_to_response, increment_single_job_view_count
+from .job_dependencies import require_employer_role, parse_job_uuid, get_job_by_id, require_job_ownership
 
 
 router = APIRouter(
@@ -99,10 +98,8 @@ async def get_public_jobs(
     result = await session.execute(stmt)
     jobs = result.scalars().all()
     
-    # Increment view count for each job (async update)
-    for job in jobs:
-        job.view_count += 1
-    await session.commit()
+    # Note: View counts are NOT incremented on the listing page.
+    # View counts only increment when viewing individual job details.
     
     # Convert to response models
     job_responses = [job_to_response(job) for job in jobs]
@@ -131,7 +128,7 @@ async def get_public_job(
     Only returns jobs with status "published" that are active and not expired.
     
     Args:
-        job_id: Job UUID
+        job_id: Job UUID (parsed by dependency)
         session: Database session
         
     Returns:
@@ -140,6 +137,7 @@ async def get_public_job(
     Raises:
         HTTPException: 404 if job not found or not publicly available
     """
+    # Parse and validate UUID
     try:
         job_uuid = uuid.UUID(job_id)
     except ValueError:
@@ -166,9 +164,10 @@ async def get_public_job(
             detail="Job not found or not available for viewing"
         )
     
-    # Increment view count
-    job.view_count += 1
-    await session.commit()
+    # Increment view count efficiently when viewing job details
+    await increment_single_job_view_count(session, job_uuid)
+    
+    # Refresh job to get updated view count
     await session.refresh(job)
     
     return job_to_response(job)
@@ -178,7 +177,7 @@ async def get_public_job(
 async def get_my_jobs(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_employer_role),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -191,26 +190,17 @@ async def get_my_jobs(
     Args:
         page: Page number (default: 1)
         page_size: Number of items per page (default: 10, max: 100)
-        user: Current authenticated user (from dependency)
+        user: Current authenticated user (from dependency, already validated for role)
         session: Database session
         
     Returns:
         JobsListResponse: Paginated list of jobs with metadata
-        
-    Raises:
-        HTTPException: 403 if user doesn't have 'both' role
     """
-    # Check user role
-    if user.role != UserRole.both:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only users with 'both' role (employer and employee) can view their jobs."
-        )
-    
     # Calculate offset
     offset = (page - 1) * page_size
     
-    # Get total count
+    # Get total count and jobs in parallel (if supported) or sequentially
+    # For now, we'll do them sequentially but efficiently
     count_stmt = select(func.count(Job.id)).where(Job.employer_id == user.id)
     total_result = await session.execute(count_stmt)
     total = total_result.scalar_one()
@@ -243,9 +233,7 @@ async def get_my_jobs(
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
-    job_id: str,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    job_user: tuple[Job, User] = Depends(require_job_ownership),
 ):
     """
     Get a single job by ID.
@@ -256,49 +244,11 @@ async def get_job(
     - User must be the owner of the job
     
     Args:
-        job_id: Job UUID
-        user: Current authenticated user (from dependency)
-        session: Database session
+        job_user: Tuple of (Job, User) from dependency (already validated)
         
     Returns:
         JobResponse: Job details
-        
-    Raises:
-        HTTPException: 403 if user doesn't have 'both' role or doesn't own the job
-        HTTPException: 404 if job not found
     """
-    # Check user role
-    if user.role != UserRole.both:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only users with 'both' role (employer and employee) can view jobs."
-        )
-    
-    try:
-        job_uuid = uuid.UUID(job_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid job ID format"
-        )
-    
-    # Get job
-    stmt = select(Job).where(Job.id == job_uuid)
-    result = await session.execute(stmt)
-    job = result.scalar_one_or_none()
-    
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
-    
-    # Check if user owns the job
-    if job.employer_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to access this job"
-        )
-    
+    job, _ = job_user
     return job_to_response(job)
 
